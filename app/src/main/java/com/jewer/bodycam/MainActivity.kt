@@ -1,5 +1,6 @@
 package com.jewer.bodycam
 
+import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.util.Log
@@ -112,11 +113,17 @@ class MainActivity : ComponentActivity() {
         if (getKeyRecordingStatus(this)) {
             when (keyCode) {
                 KeyEvent.KEYCODE_VOLUME_UP -> {
-                    ScreenRecordService.startViaKey()
+                    val intent = Intent(applicationContext, ScreenRecordService::class.java).apply {
+                        action = ScreenRecordService.START_RECORDING
+                    }
+                    startForegroundService(intent)
                     return true
                 }
                 KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                    ScreenRecordService.stopViaKey()
+                    val intent = Intent(applicationContext, ScreenRecordService::class.java).apply {
+                        action = ScreenRecordService.STOP_RECORDING
+                    }
+                    startService(intent)
                     return true
                 }
             }

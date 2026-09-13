@@ -58,6 +58,7 @@ import com.jewer.bodycam.backend.functions.getBeepVolume
 import com.jewer.bodycam.backend.functions.getBodyDetectionStatus
 import com.jewer.bodycam.backend.functions.getBodycamBrand
 import com.jewer.bodycam.backend.functions.getCameraFps
+import com.jewer.bodycam.backend.functions.getVideoQuality
 import com.jewer.bodycam.backend.functions.getFisheyeK
 import com.jewer.bodycam.backend.functions.getFisheyeScale
 import com.jewer.bodycam.backend.functions.getFlashlightStatus
@@ -88,6 +89,7 @@ import com.jewer.bodycam.backend.functions.updateSimulatedWideAngleStatus
 import com.jewer.bodycam.backend.functions.updateUserName
 import com.jewer.bodycam.backend.functions.updateVibrateAndBeepTimeInterval
 import com.jewer.bodycam.backend.functions.updateVibrateStatus
+import com.jewer.bodycam.backend.functions.updateVideoQuality
 import com.jewer.bodycam.backend.functions.vibrateOnce
 import com.jewer.bodycam.frontend.nav.NAV
 import com.jewer.bodycam.ui.theme.DarkYellow
@@ -110,6 +112,7 @@ fun SettingScreen(
     val instructionAlertDialogIsVisible = remember { mutableStateOf(false) }
     var timeIntervalExpand by remember { mutableStateOf(false) }
     var fpsExpand by remember { mutableStateOf(false) }
+    var qualityExpand by remember { mutableStateOf(false) }
     var brandExpand by remember { mutableStateOf(false) }
     var orientationExpand by remember { mutableStateOf(false) }
     var backCameraExpand by remember { mutableStateOf(false) }
@@ -212,6 +215,19 @@ fun SettingScreen(
             ?: fpsOptions.find { it.fps == 30 }!!
     }
     var chosenFpsOption by remember { mutableStateOf(initialFpsOption) }
+
+    data class QualityOption(val displayText: String, val code: String)
+    val qualityOptions = listOf(
+        QualityOption("SD (480p)", "SD"),
+        QualityOption("HD (720p)", "HD"),
+        QualityOption("FHD (1080p)", "FHD"),
+        QualityOption("UHD (4K)", "UHD")
+    )
+    val initialQualityOption = remember {
+        qualityOptions.find { it.code == getVideoQuality(context) }
+            ?: qualityOptions.find { it.code == "SD" }!!
+    }
+    var chosenQualityOption by remember { mutableStateOf(initialQualityOption) }
 
     val bodycamBrands = listOf("AXON", "MOTOROLA", "TRANSCEND", "GETAC", "DOZOR", "PANASONIC")
 
@@ -475,6 +491,24 @@ fun SettingScreen(
                                     updateCameraFps(context, option.fps)
                                     playFeedback()
                                     fpsExpand = false
+                                })
+                            }
+                        }
+                    }
+                }
+
+                // 錄影畫質選擇 (SD, HD, FHD, UHD, 預設 SD)
+                TextButton(onClick = { qualityExpand = !qualityExpand }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "Video Quality", textAlign = TextAlign.Start, modifier = Modifier.weight(1f), color = White)
+                        Text(text = chosenQualityOption.displayText, color = DarkYellow)
+                        DropdownMenu(expanded = qualityExpand, onDismissRequest = { qualityExpand = false }, modifier = Modifier.border(1.dp, White)) {
+                            qualityOptions.forEach { option ->
+                                DropdownMenuItem(text = { Text(text = option.displayText, color = White) }, onClick = {
+                                    chosenQualityOption = option
+                                    updateVideoQuality(context, option.code)
+                                    playFeedback()
+                                    qualityExpand = false
                                 })
                             }
                         }

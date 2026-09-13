@@ -350,3 +350,19 @@ fun getCameraFps(context: Context): Int {
 }
 
 /******************************************************************************************************************/
+
+// 更新錄影畫質 ("SD", "HD", "FHD", "UHD")
+fun updateVideoQuality(context: Context, quality: String) {
+    val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    sharedPreferences.edit {
+        putString("videoQuality", quality)
+    }
+}
+
+// 讀取錄影畫質 (預設 "SD")
+fun getVideoQuality(context: Context): String {
+    val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    return sharedPreferences.getString("videoQuality", "SD") ?: "SD"
+}
+
+/******************************************************************************************************************/

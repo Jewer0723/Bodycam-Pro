@@ -156,7 +156,9 @@ class ScreenRecordService: Service() {
         try {
             activeRecording?.stop()
             activeRecording = null
-            playSoundAtMaxVolume(applicationContext, R.raw.axonstoprecordsound)
+            val brand = getBodycamBrand(applicationContext)
+            val soundRes = if (brand == "MOTOROLA") R.raw.motorolastoprecordsound else R.raw.axonstoprecordsound
+            playSoundAtMaxVolume(applicationContext, soundRes)
         } catch (e: Exception) {
             Log.e("ScreenRecordService", "activeRecording.stop failed", e)
         } finally {

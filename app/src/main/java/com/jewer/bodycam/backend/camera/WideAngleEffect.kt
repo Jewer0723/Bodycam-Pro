@@ -30,6 +30,7 @@ import com.jewer.bodycam.R
 import com.jewer.bodycam.backend.functions.getCurrentBatteryLevel
 import com.jewer.bodycam.backend.functions.getCurrentTime
 import com.jewer.bodycam.backend.functions.getPhoneName
+import com.jewer.bodycam.backend.functions.getVideoQuality
 import com.jewer.bodycam.ui.theme.Black
 import com.jewer.bodycam.ui.theme.DarkOrange
 import com.jewer.bodycam.ui.theme.DarkRed
@@ -316,9 +317,8 @@ class WideAngleSurfaceProcessor(
         val nowStr = getCurrentTime()
         val battery = getCurrentBatteryLevel(context)
         val phoneName = getPhoneName()
-
-        val padX = (width * 0.06f)
-        val padY = (height * 0.06f)
+        val quality = getVideoQuality(context)
+        val isSd = (quality == "SD")
 
         // ── 繪製人體辨識 AI 追蹤框 ──
         val currentPose = poseBoundingBox
@@ -339,9 +339,40 @@ class WideAngleSurfaceProcessor(
             canvas.drawRect(left, top, right, bottom, boxPaint)
         }
 
-        val textFontSize = if (isPortrait) width * 0.030f else height * 0.030f
-        val iconSize = if (isPortrait) (width * 0.12f).toInt() else (height * 0.14f).toInt()
-        val recIconSize = if (isPortrait) (width * 0.08f).toInt() else (height * 0.10f).toInt()
+        // ── 四組 UI 繪製邏輯分支 ──
+        when {
+            !isPortrait && isSd -> drawLandscapeSdOverlay(canvas, width, height, nowStr, battery, phoneName)
+            !isPortrait && !isSd -> drawLandscapeHdOverlay(canvas, width, height, nowStr, battery, phoneName)
+            isPortrait && isSd -> drawPortraitSdOverlay(canvas, width, height, nowStr, battery, phoneName)
+            else -> drawPortraitHdOverlay(canvas, width, height, nowStr, battery, phoneName)
+        }
+
+        if (watermarkTexName == -1) {
+            val textures = IntArray(1)
+            GLES20.glGenTextures(1, textures, 0)
+            watermarkTexName = textures[0]
+        }
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, watermarkTexName)
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
+        GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
+    }
+
+    // ── 分組 1: 水平 SD (Landscape SD) 專用精細微調邏輯 ──
+    private fun drawLandscapeSdOverlay(
+        canvas: Canvas,
+        width: Int,
+        height: Int,
+        nowStr: String,
+        battery: Int,
+        phoneName: String
+    ) {
+        val padX = width * 0.04f
+        val padY = height * 0.04f
+
+        val textFontSize = height * 0.032f
+        val iconSize = (height * 0.16f).toInt()
+        val recIconSize = (height * 0.08f).toInt()
 
         val textPaint = Paint().apply {
             color = White.toArgb()
@@ -375,149 +406,204 @@ class WideAngleSurfaceProcessor(
 
         when (brand) {
             "AXON" -> {
+                // Axon Logo: 向右移動一點
                 val logoDrawable = ContextCompat.getDrawable(context, R.mipmap.ic_water_mark_foreground)?.apply { setTint(DarkYellow.toArgb()) }
+                val logoRight = width - padX + 80f
+                val logoLeft = logoRight - iconSize
                 logoDrawable?.let {
-                    it.setBounds((width - iconSize - padX).toInt(), padY.toInt(), (width - padX).toInt(), (padY + iconSize).toInt())
+                    it.setBounds(logoLeft.toInt(), padY.toInt(), logoRight.toInt(), (padY + iconSize).toInt())
                     it.draw(canvas)
                 }
-                textPaint.textAlign = Paint.Align.RIGHT
-                canvas.drawText("$userName $nowStr", width - iconSize - padX - 20f, padY + textFontSize * 1.2f, textPaint)
-                canvas.drawText(phoneName, width - iconSize - padX - 20f, padY + textFontSize * 2.5f, textPaint)
 
+                // Axon Text: 字體向下和 icon 同一水平且稍微向右和 icon 近一點
+                textPaint.textAlign = Paint.Align.RIGHT
+                canvas.drawText("$userName  $nowStr", logoLeft + 38f, padY + textFontSize * 2.3f, textPaint)
+                canvas.drawText(phoneName, logoLeft - 22f, padY + textFontSize * 3.3f, textPaint)
+
+                // 待機/錄影中 Icon: 稍微向左一點
                 if (showRecIcon) {
                     recDrawable?.let {
-                        it.setBounds(padX.toInt(), padY.toInt(), (padX + recIconSize).toInt(), (padY + recIconSize).toInt())
+                        it.setBounds((padX - 50f).toInt(), (padY + 40f).toInt(), (padX - 50f + recIconSize).toInt(), (padY + recIconSize + 40f).toInt())
                         it.draw(canvas)
                     }
                 }
             }
             "MOTOROLA" -> {
-                val bannerHeight = textFontSize * 3.0f + padY
+                // 上方透明黑色背景變細一點
+                val bannerHeight = textFontSize * 2f + padY
                 val bgPaint = Paint().apply { color = Black.copy(alpha = 0.5f).toArgb() }
                 canvas.drawRect(0f, 0f, width.toFloat(), bannerHeight, bgPaint)
 
+                // Motorola Icon: 往下向左一點在黑色背景中間
                 val logoDrawable = ContextCompat.getDrawable(context, R.mipmap.ic_motorola_icon_foreground)?.apply { setTint(White.toArgb()) }
+                val logoSize = (bannerHeight * 0.5f).toInt()
+                val logoTop = ((bannerHeight - logoSize) / 0.9f).toInt()
+                val logoLeft = (padX - 80f).toInt()
                 logoDrawable?.let {
-                    val lSize = (bannerHeight * 0.5f).toInt()
-                    it.setBounds(padX.toInt(), (padY * 0.5f).toInt(), (padX + lSize).toInt(), (padY * 0.5f + lSize).toInt())
+                    it.setBounds(logoLeft, logoTop, logoLeft + logoSize, logoTop + logoSize)
                     it.draw(canvas)
                 }
-                textPaint.textAlign = Paint.Align.LEFT
-                textPaint.isFakeBoldText = true
-                canvas.drawText("MOTOROLA SOLUTIONS", padX + iconSize + 10f, padY + textFontSize * 1.2f, textPaint)
 
-                if (!isPortrait) {
-                    textPaint.textAlign = Paint.Align.RIGHT
-                    textPaint.isFakeBoldText = false
-                    canvas.drawText("$nowStr $userName $phoneName", width - padX, padY + textFontSize * 1.2f, textPaint)
-                } else {
-                    textPaint.textAlign = Paint.Align.LEFT
-                    textPaint.isFakeBoldText = false
-                    canvas.drawText("$nowStr $userName $phoneName", padX, height - padY - 20f, textPaint)
+                // Motorola 字體粗體斜體，SOLUTIONS 斜體，兩者靠左且高度和 icon 切齊
+                val motoPaintBoldItalic = Paint(textPaint).apply {
+                    typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD_ITALIC)
+                    textAlign = Paint.Align.LEFT
+                    style = Paint.Style.FILL_AND_STROKE
+                    strokeWidth = 2.5f
+                    textScaleX = 2f
+                    textSize = textFontSize * 0.55f
+                }
+                val motoPaintItalic = Paint(textPaint).apply {
+                    typeface = Typeface.create(Typeface.MONOSPACE, Typeface.ITALIC)
+                    textAlign = Paint.Align.LEFT
+                    textScaleX = 1.8f
+                    textSize = textFontSize * 0.55f
                 }
 
+                val textY = logoTop + logoSize * 0.6f
+                val motoTextLeft = logoLeft + logoSize + 0.45f
+                canvas.drawText("MOTOROLA", motoTextLeft, textY, motoPaintBoldItalic)
+                val motoWidth = motoPaintBoldItalic.measureText("MOTOROLA")
+                canvas.drawText("SOLUTIONS", motoTextLeft + motoWidth + 13f, textY, motoPaintItalic)
+
+                // 其餘時間和使用者名稱等等都往右靠
+                textPaint.textAlign = Paint.Align.RIGHT
+                textPaint.isFakeBoldText = false
+                canvas.drawText("$nowStr $userName", width - padX + 50f, textY, textPaint)
+
+                // 待機/錄影中 Icon: 稍微向右一點
                 if (showRecIcon) {
                     recDrawable?.let {
-                        val topPos = (bannerHeight + 20f).toInt()
-                        it.setBounds((width - recIconSize - padX).toInt(), topPos, (width - padX).toInt(), topPos + recIconSize)
+                        val topPos = (bannerHeight + 30f).toInt()
+                        it.setBounds((width - recIconSize - padX + 50f).toInt(), topPos, (width - padX + 50f).toInt(), topPos + recIconSize)
                         it.draw(canvas)
                     }
                 }
             }
             "TRANSCEND" -> {
+                // Transcend Icon: 往左靠一點
                 val logoDrawable = ContextCompat.getDrawable(context, R.mipmap.ic_transcend_icon_foreground)?.apply { setTint(DarkRed.toArgb()) }
+                val logoLeft = padX - 15f
+                val logoTop = height - iconSize - padY
                 logoDrawable?.let {
-                    it.setBounds(padX.toInt(), (height - iconSize - padY).toInt(), (padX + iconSize).toInt(), (height - padY).toInt())
+                    it.setBounds(logoLeft.toInt(), logoTop.toInt(), (logoLeft + iconSize).toInt(), (height - padY).toInt())
                     it.draw(canvas)
                 }
+
+                // 字體往上和 icon 切齊且往左靠近 icon 一點
                 textPaint.textAlign = Paint.Align.LEFT
                 textPaint.color = DarkOrange.toArgb()
-                canvas.drawText(userName, padX + iconSize + 20f, height - padY - textFontSize * 1.5f, textPaint)
-                canvas.drawText("$nowStr $phoneName", padX + iconSize + 20f, height - padY, textPaint)
+                val textLeft = logoLeft + iconSize + 10f
+                canvas.drawText(userName, textLeft, logoTop + textFontSize * 1.0f, textPaint)
+                canvas.drawText("$nowStr $phoneName", textLeft, logoTop + textFontSize * 2.2f, textPaint)
 
+                // 待機/錄影中 Icon: 稍微向左一點
                 if (showRecIcon) {
                     recDrawable?.let {
-                        it.setBounds(padX.toInt(), padY.toInt(), (padX + recIconSize).toInt(), (padY + recIconSize).toInt())
+                        it.setBounds((padX - 10f).toInt(), padY.toInt(), (padX - 10f + recIconSize).toInt(), (padY + recIconSize).toInt())
                         it.draw(canvas)
                     }
                 }
             }
             "GETAC" -> {
-                val bannerHeight = textFontSize * 3.0f + padY
+                // 上方透明黑色背景
+                val bannerHeight = textFontSize * 2.2f + padY
                 val bgPaint = Paint().apply { color = Black.copy(alpha = 0.5f).toArgb() }
                 canvas.drawRect(0f, 0f, width.toFloat(), bannerHeight, bgPaint)
 
+                // Getac Icon: 高度稍微寬一點 (不擠壓)，向下往左靠一點
                 val logoDrawable = ContextCompat.getDrawable(context, R.mipmap.ic_getac_icon_foreground)?.apply { setTint(DarkOrange.toArgb()) }
+                val logoHeight = (bannerHeight * 0.65f).toInt()
+                val logoWidth = (logoHeight * 2.8f).toInt()
+                val logoTop = ((bannerHeight - logoHeight) / 2f).toInt() + 5
+                val logoLeft = (padX - 15f).toInt()
                 logoDrawable?.let {
-                    val lSize = (bannerHeight * 0.5f).toInt()
-                    it.setBounds(padX.toInt(), (padY * 0.5f).toInt(), (padX + lSize * 2).toInt(), (padY * 0.5f + lSize).toInt())
+                    it.setBounds(logoLeft, logoTop, logoLeft + logoWidth, logoTop + logoHeight)
                     it.draw(canvas)
                 }
 
-                if (!isPortrait) {
-                    textPaint.textAlign = Paint.Align.RIGHT
-                    canvas.drawText("$nowStr $userName $phoneName", width - padX, padY + textFontSize * 1.2f, textPaint)
-                } else {
-                    textPaint.textAlign = Paint.Align.LEFT
-                    canvas.drawText("$nowStr $userName $phoneName", padX, height - padY - 20f, textPaint)
-                }
+                // 字體往右靠一點
+                textPaint.textAlign = Paint.Align.RIGHT
+                canvas.drawText("$nowStr $userName $phoneName", width - padX + 10f, logoTop + logoHeight * 0.8f, textPaint)
 
+                // 待機/錄影中 Icon: 稍微向右一點
                 if (showRecIcon) {
                     recDrawable?.let {
-                        val topPos = (bannerHeight + 20f).toInt()
-                        it.setBounds((width - recIconSize - padX).toInt(), topPos, (width - padX).toInt(), topPos + recIconSize)
+                        val topPos = (bannerHeight + 15f).toInt()
+                        it.setBounds((width - recIconSize - padX + 10f).toInt(), topPos, (width - padX + 10f).toInt(), topPos + recIconSize)
                         it.draw(canvas)
                     }
                 }
             }
             "DOZOR" -> {
+                // Dozor Icon: 稍微放大一點且往右靠一點
                 val logoDrawable = ContextCompat.getDrawable(context, R.mipmap.ic_dozor_icon_foreground)?.apply { setTint(White.toArgb()) }
+                val dIconSize = (iconSize * 1.25f).toInt()
+                val logoLeft = width - dIconSize - padX + 15f
                 logoDrawable?.let {
-                    it.setBounds((width - iconSize - padX).toInt(), padY.toInt(), (width - padX).toInt(), (padY + iconSize).toInt())
+                    it.setBounds(logoLeft.toInt(), padY.toInt(), (logoLeft + dIconSize).toInt(), (padY + dIconSize).toInt())
                     it.draw(canvas)
                 }
-                textPaint.textAlign = Paint.Align.CENTER
-                canvas.drawText("DZ $userName $phoneName *$nowStr", width / 2f, height - padY, textPaint)
 
+                // 字體往上一點
+                val textY = height - padY - 25f
+                textPaint.textAlign = Paint.Align.CENTER
+                canvas.drawText("DZ $userName $phoneName *$nowStr", width / 2f, textY, textPaint)
+
+                // 待機/錄影中 Icon: 稍微向左一點
                 if (showRecIcon) {
                     recDrawable?.let {
-                        it.setBounds(padX.toInt(), padY.toInt(), (padX + recIconSize).toInt(), (padY + recIconSize).toInt())
+                        it.setBounds((padX - 10f).toInt(), padY.toInt(), (padX - 10f + recIconSize).toInt(), (padY + recIconSize).toInt())
                         it.draw(canvas)
                     }
                 }
+
+                // 電池訊息稍微往上靠右一點且高度和字體切齊
+                canvas.drawText("$battery%", width - padX + 10f, textY, batteryPaint)
+                return
             }
             "PANASONIC" -> {
+                // 字體往左靠一點
                 textPaint.textAlign = Paint.Align.LEFT
-                canvas.drawText(nowStr, padX, padY + textFontSize * 1.2f, textPaint)
-                canvas.drawText("$userName $phoneName", padX, padY + textFontSize * 2.5f, textPaint)
+                canvas.drawText(nowStr, padX - 10f, padY + textFontSize * 1.2f, textPaint)
+                canvas.drawText("$userName $phoneName", padX - 10f, padY + textFontSize * 2.5f, textPaint)
 
+                // Panasonic Icon: 放大一點且靠右一點
                 val logoDrawable = ContextCompat.getDrawable(context, R.mipmap.ic_panasonic1_icon_foreground)?.apply { setTint(LightGreen.toArgb()) }
+                val pIconSize = (iconSize * 1.25f).toInt()
+                val logoLeft = width - pIconSize - padX + 15f
                 logoDrawable?.let {
-                    it.setBounds((width - iconSize - padX).toInt(), padY.toInt(), (width - padX).toInt(), (padY + iconSize).toInt())
+                    it.setBounds(logoLeft.toInt(), padY.toInt(), (logoLeft + pIconSize).toInt(), (padY + pIconSize).toInt())
                     it.draw(canvas)
                 }
 
+                // 待機/錄影中 Icon: 稍微向左一點
                 if (showRecIcon) {
                     recDrawable?.let {
-                        it.setBounds(padX.toInt(), (height - recIconSize - padY).toInt(), (padX + recIconSize).toInt(), (height - padY).toInt())
+                        it.setBounds((padX - 10f).toInt(), (height - recIconSize - padY).toInt(), (padX - 10f + recIconSize).toInt(), (height - padY).toInt())
                         it.draw(canvas)
                     }
                 }
             }
         }
 
-        // 繪製右下角電量資訊
-        canvas.drawText("$battery%", width - padX, height - padY, batteryPaint)
+        // 繪製右下角電量資訊 (除了 Dozor 已經在上面處理高度切齊之外)
+        canvas.drawText("$battery%", width - padX + 30f, height - padY - 50f, batteryPaint)
+    }
 
-        if (watermarkTexName == -1) {
-            val textures = IntArray(1)
-            GLES20.glGenTextures(1, textures, 0)
-            watermarkTexName = textures[0]
-        }
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, watermarkTexName)
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
-        GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
+    // ── 分組 2: 水平 HD / FHD / UHD ──
+    private fun drawLandscapeHdOverlay(canvas: Canvas, width: Int, height: Int, nowStr: String, battery: Int, phoneName: String) {
+        drawLandscapeSdOverlay(canvas, width, height, nowStr, battery, phoneName)
+    }
+
+    // ── 分組 3: 垂直 SD ──
+    private fun drawPortraitSdOverlay(canvas: Canvas, width: Int, height: Int, nowStr: String, battery: Int, phoneName: String) {
+        drawLandscapeSdOverlay(canvas, width, height, nowStr, battery, phoneName)
+    }
+
+    // ── 分組 4: 垂直 HD / FHD / UHD ──
+    private fun drawPortraitHdOverlay(canvas: Canvas, width: Int, height: Int, nowStr: String, battery: Int, phoneName: String) {
+        drawLandscapeSdOverlay(canvas, width, height, nowStr, battery, phoneName)
     }
 
     private fun initEGL() {

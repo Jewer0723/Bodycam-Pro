@@ -28,7 +28,7 @@ import com.jewer.bodycam.backend.functions.getBeepSoundStatus
 import com.jewer.bodycam.backend.functions.getBodycamBrand
 import com.jewer.bodycam.backend.functions.getVibrateAndBeepTimeInterval
 import com.jewer.bodycam.backend.functions.getVibrateStatus
-import com.jewer.bodycam.backend.functions.playSoundAtMaxVolume
+import com.jewer.bodycam.backend.functions.playSound
 import com.jewer.bodycam.backend.functions.vibrateOnce
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,7 +45,7 @@ import java.util.Date
 import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 
-class ScreenRecordService: Service() {
+class RecordService: Service() {
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -158,7 +158,7 @@ class ScreenRecordService: Service() {
             activeRecording = null
             val brand = getBodycamBrand(applicationContext)
             val soundRes = if (brand == "MOTOROLA") R.raw.motorolastoprecordsound else R.raw.axonstoprecordsound
-            playSoundAtMaxVolume(applicationContext, soundRes)
+            playSound(applicationContext, soundRes)
         } catch (e: Exception) {
             Log.e("ScreenRecordService", "activeRecording.stop failed", e)
         } finally {
@@ -182,7 +182,7 @@ class ScreenRecordService: Service() {
 
                 if (beepApproved) {
                     val soundRes = if (brand == "MOTOROLA") R.raw.motorolastartrecordsound else R.raw.axonstartrecordsound
-                    playSoundAtMaxVolume(applicationContext, soundRes)
+                    playSound(applicationContext, soundRes)
                 }
                 if (vibrateApproved) {
                     repeat(2) {

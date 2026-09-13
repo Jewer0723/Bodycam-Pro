@@ -23,7 +23,7 @@ import com.jewer.bodycam.backend.functions.getKeyRecordingStatus
 import com.jewer.bodycam.backend.functions.initSettings
 import com.jewer.bodycam.backend.functions.orientationFlow
 import com.jewer.bodycam.backend.functions.setFullScreen
-import com.jewer.bodycam.backend.services.ScreenRecordService
+import com.jewer.bodycam.backend.services.RecordService
 import com.jewer.bodycam.frontend.screens.PermissionScreen
 
 class MainActivity : ComponentActivity() {
@@ -113,15 +113,15 @@ class MainActivity : ComponentActivity() {
         if (getKeyRecordingStatus(this)) {
             when (keyCode) {
                 KeyEvent.KEYCODE_VOLUME_UP -> {
-                    val intent = Intent(applicationContext, ScreenRecordService::class.java).apply {
-                        action = ScreenRecordService.START_RECORDING
+                    val intent = Intent(applicationContext, RecordService::class.java).apply {
+                        action = RecordService.START_RECORDING
                     }
                     startForegroundService(intent)
                     return true
                 }
                 KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                    val intent = Intent(applicationContext, ScreenRecordService::class.java).apply {
-                        action = ScreenRecordService.STOP_RECORDING
+                    val intent = Intent(applicationContext, RecordService::class.java).apply {
+                        action = RecordService.STOP_RECORDING
                     }
                     startService(intent)
                     return true

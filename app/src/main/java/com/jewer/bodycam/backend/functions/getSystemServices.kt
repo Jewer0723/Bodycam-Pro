@@ -17,6 +17,11 @@ import androidx.core.view.WindowInsetsControllerCompat
 import java.text.SimpleDateFormat
 import java.util.Locale
 
+// 獲取裝置名稱
+fun getPhoneName(): String {
+    return "${Build.MODEL} ${Build.ID}"
+}
+
 // 獲取現在時間
 fun getCurrentTime(): String {
     val timeFormat = "yyyy-MM-dd HH:mm:ss"
@@ -68,7 +73,7 @@ fun setScreenBrightness(context: Context, isLow: Boolean) {
 }
 
 // 撥放音檔及音量控制
-fun playSoundAtMaxVolume(context: Context, resourceId: Int) {
+fun playSound(context: Context, resourceId: Int) {
     val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
     // 1. 記錄當前的媒體音量

@@ -55,10 +55,8 @@ import androidx.navigation.NavController
 import com.jewer.bodycam.R
 import com.jewer.bodycam.backend.functions.getBeepSoundStatus
 import com.jewer.bodycam.backend.functions.getBeepVolume
-import com.jewer.bodycam.backend.functions.getBodyDetectionStatus
 import com.jewer.bodycam.backend.functions.getBodycamBrand
 import com.jewer.bodycam.backend.functions.getCameraFps
-import com.jewer.bodycam.backend.functions.getVideoQuality
 import com.jewer.bodycam.backend.functions.getFisheyeK
 import com.jewer.bodycam.backend.functions.getFisheyeScale
 import com.jewer.bodycam.backend.functions.getFlashlightStatus
@@ -71,10 +69,10 @@ import com.jewer.bodycam.backend.functions.getSimulatedWideAngleStatus
 import com.jewer.bodycam.backend.functions.getUserName
 import com.jewer.bodycam.backend.functions.getVibrateAndBeepTimeInterval
 import com.jewer.bodycam.backend.functions.getVibrateStatus
-import com.jewer.bodycam.backend.functions.playSoundAtMaxVolume
+import com.jewer.bodycam.backend.functions.getVideoQuality
+import com.jewer.bodycam.backend.functions.playSound
 import com.jewer.bodycam.backend.functions.updateBeepSoundStatus
 import com.jewer.bodycam.backend.functions.updateBeepVolume
-import com.jewer.bodycam.backend.functions.updateBodyDetectionStatus
 import com.jewer.bodycam.backend.functions.updateBodycamBrand
 import com.jewer.bodycam.backend.functions.updateCameraFps
 import com.jewer.bodycam.backend.functions.updateFisheyeK
@@ -124,7 +122,6 @@ fun SettingScreen(
     val isLowBrightnessChecked = remember { mutableStateOf(getLowBrightnessStatus(context)) }
     val isFlashlightChecked = remember { mutableStateOf(getFlashlightStatus(context)) }
     val isKeyRecordingChecked = remember { mutableStateOf(getKeyRecordingStatus(context)) }
-    val isBodyDetectionChecked = remember { mutableStateOf(getBodyDetectionStatus(context)) }
     val isSimulatedWideAngleChecked = remember { mutableStateOf(getSimulatedWideAngleStatus(context)) }
     var fisheyeK by remember { mutableFloatStateOf(getFisheyeK(context)) }
     var fisheyeScale by remember { mutableFloatStateOf(getFisheyeScale(context)) }
@@ -180,7 +177,7 @@ fun SettingScreen(
     }
 
     val playFeedback = {
-        if (isBeepSoundChecked.value) playSoundAtMaxVolume(context, R.raw.settingsactivatedsound)
+        if (isBeepSoundChecked.value) playSound(context, R.raw.settingsactivatedsound)
         if (isVibrateChecked.value) vibrateOnce(context, 500)
     }
 
@@ -220,8 +217,7 @@ fun SettingScreen(
     val qualityOptions = listOf(
         QualityOption("SD (480p)", "SD"),
         QualityOption("HD (720p)", "HD"),
-        QualityOption("FHD (1080p)", "FHD"),
-        QualityOption("UHD (4K)", "UHD")
+        QualityOption("FHD (1080p)", "FHD")
     )
     val initialQualityOption = remember {
         qualityOptions.find { it.code == getVideoQuality(context) }
@@ -231,13 +227,12 @@ fun SettingScreen(
 
     val bodycamBrands = listOf("AXON", "MOTOROLA", "TRANSCEND", "GETAC", "DOZOR", "PANASONIC")
 
-    LaunchedEffect(userName.value, isVibrateChecked.value, isLowBrightnessChecked.value, isFlashlightChecked.value, isKeyRecordingChecked.value, isBodyDetectionChecked.value, chosenOrientationMode.intValue, isSimulatedWideAngleChecked.value, fisheyeK, fisheyeScale) {
+    LaunchedEffect(userName.value, isVibrateChecked.value, isLowBrightnessChecked.value, isFlashlightChecked.value, isKeyRecordingChecked.value, chosenOrientationMode.intValue, isSimulatedWideAngleChecked.value, fisheyeK, fisheyeScale) {
         updateUserName(context, userName.value)
         updateVibrateStatus(context, isVibrateChecked.value)
         updateLowBrightnessStatus(context, isLowBrightnessChecked.value)
         updateFlashlightStatus(context, isFlashlightChecked.value)
         updateKeyRecordingStatus(context, isKeyRecordingChecked.value)
-        updateBodyDetectionStatus(context, isBodyDetectionChecked.value)
         updateOrientationMode(context, chosenOrientationMode.intValue)
         updateSimulatedWideAngleStatus(context, isSimulatedWideAngleChecked.value)
         updateFisheyeK(context, fisheyeK)
@@ -359,22 +354,7 @@ fun SettingScreen(
                     }
                 }
 
-                // 人體辨識
-                TextButton(onClick = {
-                    isBodyDetectionChecked.value = !isBodyDetectionChecked.value
-                    updateBodyDetectionStatus(context, isBodyDetectionChecked.value)
-                    if (isBodyDetectionChecked.value) playFeedback()
-                }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = "Human Body Detection", textAlign = TextAlign.Start, modifier = Modifier.weight(1f), color = White)
-                        Switch(checked = isBodyDetectionChecked.value, onCheckedChange = {
-                            isBodyDetectionChecked.value = it
-                            updateBodyDetectionStatus(context, it)
-                            if (isBodyDetectionChecked.value) playFeedback()
-                        },
-                            colors = SwitchDefaults.colors(checkedThumbColor = White, uncheckedThumbColor = White, checkedTrackColor = DarkYellow, uncheckedTrackColor = Gray))
-                    }
-                }
+
 
                 // 模擬廣角 (魚眼濾鏡)
                 TextButton(onClick = {

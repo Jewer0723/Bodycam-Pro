@@ -41,7 +41,7 @@ import com.jewer.bodycam.R
 import com.jewer.bodycam.backend.functions.getBeepSoundStatus
 import com.jewer.bodycam.backend.functions.getUserName
 import com.jewer.bodycam.backend.functions.getVibrateStatus
-import com.jewer.bodycam.backend.functions.playSoundAtMaxVolume
+import com.jewer.bodycam.backend.functions.playSound
 import com.jewer.bodycam.backend.functions.vibrateOnce
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -103,7 +103,7 @@ class RadioService : Service() {
         if (isRadioRunning.value) return
 
         // 啟動時的提示音與震動
-        if (getBeepSoundStatus(this)) playSoundAtMaxVolume(this, R.raw.radiostartsound)
+        if (getBeepSoundStatus(this)) playSound(this, R.raw.radiostartsound)
         if (getVibrateStatus(this)) vibrateOnce(this, 500)
 
         createNotificationChannel()
@@ -128,7 +128,7 @@ class RadioService : Service() {
             while (isRadioSearching.value && isRadioRunning.value) {
                 delay(1000.milliseconds)
                 if (getBeepSoundStatus(this@RadioService)) {
-                    playSoundAtMaxVolume(this@RadioService, R.raw.radiowaitingsound)
+                    playSound(this@RadioService, R.raw.radiowaitingsound)
                 }
                 delay(1000.milliseconds)
             }
@@ -148,7 +148,7 @@ class RadioService : Service() {
         if (!isRadioRunning.value) return
         
         // 無論手動還是自動停止，都播放結束提示音與震動
-        if (getBeepSoundStatus(this)) playSoundAtMaxVolume(this, R.raw.radiooversound)
+        if (getBeepSoundStatus(this)) playSound(this, R.raw.radiooversound)
         if (getVibrateStatus(this)) vibrateOnce(this, 500)
 
         isRadioRunning.value = false
@@ -224,7 +224,7 @@ class RadioService : Service() {
                     while (isRadioSearching.value && isRadioRunning.value) {
                         delay(1000.milliseconds)
                         if (getBeepSoundStatus(this@RadioService)) {
-                            playSoundAtMaxVolume(this@RadioService, R.raw.radiowaitingsound)
+                            playSound(this@RadioService, R.raw.radiowaitingsound)
                         }
                         delay(1000.milliseconds)
                     }

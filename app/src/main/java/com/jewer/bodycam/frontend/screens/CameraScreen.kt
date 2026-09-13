@@ -1,7 +1,6 @@
 package com.jewer.bodycam.frontend.screens
 
 import android.content.Intent
-import android.graphics.RectF
 import android.hardware.camera2.CaptureRequest
 import android.util.Log
 import android.util.Range
@@ -13,7 +12,6 @@ import androidx.camera.core.Camera
 import androidx.camera.core.CameraEffect
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
-import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.core.UseCaseGroup
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -23,7 +21,6 @@ import androidx.camera.video.QualitySelector
 import androidx.camera.video.Recorder
 import androidx.camera.video.VideoCapture
 import androidx.camera.view.PreviewView
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -55,9 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -74,14 +69,10 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.pose.PoseDetection
-import com.google.mlkit.vision.pose.accurate.AccuratePoseDetectorOptions
 import com.jewer.bodycam.R
 import com.jewer.bodycam.backend.camera.CustomCameraEffect
 import com.jewer.bodycam.backend.camera.WideAngleSurfaceProcessor
 import com.jewer.bodycam.backend.functions.getBeepSoundStatus
-import com.jewer.bodycam.backend.functions.getBodyDetectionStatus
 import com.jewer.bodycam.backend.functions.getBodycamBrand
 import com.jewer.bodycam.backend.functions.getCameraFps
 import com.jewer.bodycam.backend.functions.getCurrentTime
@@ -99,14 +90,14 @@ import com.jewer.bodycam.backend.functions.getUserName
 import com.jewer.bodycam.backend.functions.getVibrateStatus
 import com.jewer.bodycam.backend.functions.getVideoQuality
 import com.jewer.bodycam.backend.functions.orientationFlow
-import com.jewer.bodycam.backend.functions.playSoundAtMaxVolume
+import com.jewer.bodycam.backend.functions.playSound
 import com.jewer.bodycam.backend.functions.setScreenBrightness
 import com.jewer.bodycam.backend.functions.updateInstructionAlertDialogStatus
 import com.jewer.bodycam.backend.functions.updateLastBackZoomRatio
 import com.jewer.bodycam.backend.functions.updateLastFrontZoomRatio
 import com.jewer.bodycam.backend.functions.vibrateOnce
 import com.jewer.bodycam.backend.services.RadioService
-import com.jewer.bodycam.backend.services.ScreenRecordService
+import com.jewer.bodycam.backend.services.RecordService
 import com.jewer.bodycam.frontend.nav.NAV
 import com.jewer.bodycam.ui.theme.Black
 import com.jewer.bodycam.ui.theme.DarkYellow
@@ -144,7 +135,6 @@ fun CameraScreen(navController: NavHostController) {
     val isLowBrightnessApproved = remember { getLowBrightnessStatus(context) }
     val isFlashlightApproved = remember { getFlashlightStatus(context) }
 
-    var isBodyDetectionApproved by remember { mutableStateOf(getBodyDetectionStatus(context)) }
     var isSimulatedWideAngleApproved by remember { mutableStateOf(getSimulatedWideAngleStatus(context)) }
     var fisheyeK by remember { mutableFloatStateOf(getFisheyeK(context)) }
     var fisheyeScale by remember { mutableFloatStateOf(getFisheyeScale(context)) }
@@ -166,7 +156,7 @@ fun CameraScreen(navController: NavHostController) {
         }
     }
 
-    val isRecordingRunning by ScreenRecordService.isRecordingRunning.collectAsStateWithLifecycle()
+    val isRecordingRunning by RecordService.isRecordingRunning.collectAsStateWithLifecycle()
     val isRadioRunning by RadioService.isRadioRunning.collectAsStateWithLifecycle()
     val radioEndpoints by RadioService.connectedEndpoints.collectAsStateWithLifecycle()
 
@@ -178,9 +168,8 @@ fun CameraScreen(navController: NavHostController) {
 
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
 
-    // 依據設定選擇畫質 (SD: 480p [預設, 4:3], HD: 720p [16:9], FHD: 1080p [16:9], UHD: 4K [16:9])
+    // 依據設定選擇畫質 (SD: 480p [預設, 4:3], HD: 720p [16:9], FHD: 1080p [16:9])
     val targetQuality = when (selectedQualitySetting) {
-        "UHD" -> Quality.UHD
         "FHD" -> Quality.FHD
         "HD" -> Quality.HD
         else -> Quality.SD
@@ -198,7 +187,7 @@ fun CameraScreen(navController: NavHostController) {
     }
     val videoCapture = remember(recorder) {
         VideoCapture.withOutput(recorder).also {
-            ScreenRecordService.setVideoCapture(it)
+            RecordService.setVideoCapture(it)
         }
     }
 
@@ -238,23 +227,6 @@ fun CameraScreen(navController: NavHostController) {
         ) { Log.e("WideAngle", "Effect error", it) }
     }
 
-    // ── 人體辨識相關 ──
-    var detectedPoseBoundingBox by remember { mutableStateOf<RectF?>(null) }
-    var frameWidth by remember { mutableIntStateOf(0) }
-    var frameHeight by remember { mutableIntStateOf(0) }
-
-    LaunchedEffect(surfaceProcessor, detectedPoseBoundingBox, frameWidth, frameHeight) {
-        surfaceProcessor.updatePoseBox(detectedPoseBoundingBox, frameWidth, frameHeight)
-    }
-
-    val poseDetector = remember {
-        val options = AccuratePoseDetectorOptions.Builder()
-            .setDetectorMode(AccuratePoseDetectorOptions.STREAM_MODE)
-            .build()
-        PoseDetection.getClient(options)
-    }
-    val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
-
     fun toggleRadio() {
         if (isRadioRunning) {
             val intent = Intent(context, RadioService::class.java).apply { action = RadioService.ACTION_STOP }
@@ -290,9 +262,7 @@ fun CameraScreen(navController: NavHostController) {
         if (isLowBrightnessApproved) setScreenBrightness(context, true)
         onDispose {
             setScreenBrightness(context, false)
-            poseDetector.close()
-            analysisExecutor.shutdown()
-            if (!ScreenRecordService.isRecordingRunning.value) {
+            if (!RecordService.isRecordingRunning.value) {
                 cameraExecutor.shutdown()
                 surfaceProcessor.release()
             }
@@ -302,7 +272,6 @@ fun CameraScreen(navController: NavHostController) {
     LaunchedEffect(navController) {
         navController.currentBackStackEntryFlow.collect {
             chosenBrand.value = getBodycamBrand(context)
-            isBodyDetectionApproved = getBodyDetectionStatus(context)
             isSimulatedWideAngleApproved = getSimulatedWideAngleStatus(context)
             fisheyeK = getFisheyeK(context)
             fisheyeScale = getFisheyeScale(context)
@@ -314,10 +283,11 @@ fun CameraScreen(navController: NavHostController) {
     }
 
     // 將 CameraX 生命週期綁定至 ProcessLifecycleOwner，配合前台服務確保在背景與關閉螢幕時相機與 OpenGL 錄影持續運作
-    LaunchedEffect(cameraProvider, cameraSelector, isBodyDetectionApproved, processLifecycleOwner, selectedBackCameraIdSetting, selectedFrontCameraIdSetting, selectedCameraFpsSetting, selectedQualitySetting) {
+    LaunchedEffect(cameraProvider, cameraSelector, processLifecycleOwner, selectedBackCameraIdSetting, selectedFrontCameraIdSetting, selectedCameraFpsSetting, selectedQualitySetting) {
         val provider = cameraProvider ?: return@LaunchedEffect
         // 錄影中不調用 unbindAll()，防止錄影中途因狀態刷新造成錄影中斷
         if (isRecordingRunning) return@LaunchedEffect
+
         try {
             delay(200.milliseconds)
             val previewBuilder = Preview.Builder()
@@ -336,47 +306,6 @@ fun CameraScreen(navController: NavHostController) {
                 .addUseCase(preview)
                 .addUseCase(videoCapture)
                 .addEffect(wideAngleEffect)
-
-            if (isBodyDetectionApproved) {
-                val imageAnalysis = ImageAnalysis.Builder()
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .build()
-                imageAnalysis.setAnalyzer(analysisExecutor) { imageProxy ->
-                    if (lifecycleOwner.lifecycle.currentState < Lifecycle.State.STARTED) {
-                        imageProxy.close(); return@setAnalyzer
-                    }
-                    val mediaImage = imageProxy.image
-                    if (mediaImage != null) {
-                        try {
-                            val rotation = imageProxy.imageInfo.rotationDegrees
-                            val image = InputImage.fromMediaImage(mediaImage, rotation)
-                            if (rotation == 90 || rotation == 270) { frameWidth = imageProxy.height; frameHeight = imageProxy.width }
-                            else { frameWidth = imageProxy.width; frameHeight = imageProxy.height }
-
-                            poseDetector.process(image)
-                                .addOnSuccessListener { pose ->
-                                    if (lifecycleOwner.lifecycle.currentState < Lifecycle.State.STARTED) return@addOnSuccessListener
-                                    val landmarks = pose.allPoseLandmarks
-                                    val highConfidenceLandmarks = landmarks.filter { it.inFrameLikelihood > 0.99f }
-                                    if (highConfidenceLandmarks.size >= 5) {
-                                        var minX = Float.MAX_VALUE; var maxX = Float.MIN_VALUE
-                                        var minY = Float.MAX_VALUE; var maxY = Float.MIN_VALUE
-                                        for (landmark in highConfidenceLandmarks) {
-                                            val position = landmark.position
-                                            if (position.x < minX) minX = position.x
-                                            if (position.x > maxX) maxX = position.x
-                                            if (position.y < minY) minY = position.y
-                                            if (position.y > maxY) maxY = position.y
-                                        }
-                                        detectedPoseBoundingBox = RectF(minX - 30f, minY - 30f, maxX + 30f, maxY + 30f)
-                                    } else { detectedPoseBoundingBox = null }
-                                }
-                                .addOnCompleteListener { imageProxy.close() }
-                        } catch (_: Exception) { imageProxy.close() }
-                    } else { imageProxy.close() }
-                }
-                useCaseGroupBuilder.addUseCase(imageAnalysis)
-            }
 
             val camera = provider.bindToLifecycle(processLifecycleOwner, cameraSelector, useCaseGroupBuilder.build())
             activeCamera = camera
@@ -433,26 +362,6 @@ fun CameraScreen(navController: NavHostController) {
             factory = { previewView },
             modifier = Modifier.fillMaxSize()
         )
-
-        if (isBodyDetectionApproved) {
-            val currentPose = detectedPoseBoundingBox
-            if (currentPose != null) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val scaleX = size.width / frameWidth.toFloat()
-                    val scaleY = size.height / frameHeight.toFloat()
-                    val left = currentPose.left * scaleX
-                    val top = currentPose.top * scaleY
-                    val right = currentPose.right * scaleX
-                    val bottom = currentPose.bottom * scaleY
-                    drawRect(
-                        color = DarkYellow,
-                        topLeft = Offset(left, top),
-                        size = Size(right - left, bottom - top),
-                        style = Stroke(width = 3.dp.toPx())
-                    )
-                }
-            }
-        }
 
         // ── 工具列（垂直模式在下方中間，水平模式在右側中間） ──
         Box(
@@ -564,7 +473,7 @@ private fun HorizontalToolbarButtons(
         modifier = Modifier.size(50.dp),
         onClick = {
             navController.navigate(NAV.SETTING)
-            if (beepSoundApproved) playSoundAtMaxVolume(context, R.raw.buttontouchedsound)
+            if (beepSoundApproved) playSound(context, R.raw.buttontouchedsound)
             if (vibrateApproved) vibrateOnce(context, 1000)
         }
     ) {
@@ -582,7 +491,7 @@ private fun HorizontalToolbarButtons(
         onClick = {
             val nextLens = if (lensFacing == CameraSelector.LENS_FACING_BACK) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK
             onCameraSwitch(nextLens)
-            if (beepSoundApproved) playSoundAtMaxVolume(context, R.raw.buttontouchedsound)
+            if (beepSoundApproved) playSound(context, R.raw.buttontouchedsound)
             if (vibrateApproved) vibrateOnce(context, 1000)
         }
     ) {
@@ -599,15 +508,15 @@ private fun HorizontalToolbarButtons(
         modifier = Modifier.size(90.dp),
         onClick = {
             if (isRecordingRunning) {
-                Intent(context.applicationContext, ScreenRecordService::class.java).also {
-                    it.action = ScreenRecordService.STOP_RECORDING
+                Intent(context.applicationContext, RecordService::class.java).also {
+                    it.action = RecordService.STOP_RECORDING
                     context.startService(it)
                 }
-                if (beepSoundApproved) playSoundAtMaxVolume(context, R.raw.axonstoprecordsound)
+                if (beepSoundApproved) playSound(context, R.raw.axonstoprecordsound)
                 if (vibrateApproved) vibrateOnce(context, 1000)
             } else {
-                Intent(context.applicationContext, ScreenRecordService::class.java).also {
-                    it.action = ScreenRecordService.START_RECORDING
+                Intent(context.applicationContext, RecordService::class.java).also {
+                    it.action = RecordService.START_RECORDING
                     context.startForegroundService(it)
                 }
             }
@@ -626,7 +535,7 @@ private fun HorizontalToolbarButtons(
         modifier = Modifier.size(50.dp),
         onClick = {
             navController.navigate(NAV.VIDEO)
-            if (beepSoundApproved) playSoundAtMaxVolume(context, R.raw.buttontouchedsound)
+            if (beepSoundApproved) playSound(context, R.raw.buttontouchedsound)
             if (vibrateApproved) vibrateOnce(context, 1000)
         }
     ) {
@@ -708,7 +617,7 @@ private fun PortraitToolbarButtons(
         modifier = Modifier.size(50.dp),
         onClick = {
             navController.navigate(NAV.VIDEO)
-            if (beepSoundApproved) playSoundAtMaxVolume(context, R.raw.buttontouchedsound)
+            if (beepSoundApproved) playSound(context, R.raw.buttontouchedsound)
             if (vibrateApproved) vibrateOnce(context, 1000)
         }
     ) {
@@ -725,15 +634,15 @@ private fun PortraitToolbarButtons(
         modifier = Modifier.size(90.dp),
         onClick = {
             if (isRecordingRunning) {
-                Intent(context.applicationContext, ScreenRecordService::class.java).also {
-                    it.action = ScreenRecordService.STOP_RECORDING
+                Intent(context.applicationContext, RecordService::class.java).also {
+                    it.action = RecordService.STOP_RECORDING
                     context.startService(it)
                 }
-                if (beepSoundApproved) playSoundAtMaxVolume(context, R.raw.axonstoprecordsound)
+                if (beepSoundApproved) playSound(context, R.raw.axonstoprecordsound)
                 if (vibrateApproved) vibrateOnce(context, 1000)
             } else {
-                Intent(context.applicationContext, ScreenRecordService::class.java).also {
-                    it.action = ScreenRecordService.START_RECORDING
+                Intent(context.applicationContext, RecordService::class.java).also {
+                    it.action = RecordService.START_RECORDING
                     context.startForegroundService(it)
                 }
             }
@@ -753,7 +662,7 @@ private fun PortraitToolbarButtons(
         onClick = {
             val nextLens = if (lensFacing == CameraSelector.LENS_FACING_BACK) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK
             onCameraSwitch(nextLens)
-            if (beepSoundApproved) playSoundAtMaxVolume(context, R.raw.buttontouchedsound)
+            if (beepSoundApproved) playSound(context, R.raw.buttontouchedsound)
             if (vibrateApproved) vibrateOnce(context, 1000)
         }
     ) {
@@ -770,7 +679,7 @@ private fun PortraitToolbarButtons(
         modifier = Modifier.size(50.dp),
         onClick = {
             navController.navigate(NAV.SETTING)
-            if (beepSoundApproved) playSoundAtMaxVolume(context, R.raw.buttontouchedsound)
+            if (beepSoundApproved) playSound(context, R.raw.buttontouchedsound)
             if (vibrateApproved) vibrateOnce(context, 1000)
         }
     ) {

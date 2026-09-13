@@ -85,7 +85,6 @@ dependencies {
     implementation(libs.play.services.nearby)
     implementation(libs.google.play.app.update)
     implementation(libs.google.play.app.update.ktx)
-    implementation(libs.mlkit.pose.accurate)
     implementation(libs.coil.compose)
     implementation(libs.coil.video)
     implementation (libs.androidx.navigation.compose)

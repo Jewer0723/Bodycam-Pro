@@ -194,23 +194,7 @@ fun getKeyRecordingStatus(context: Context): Boolean {
 
 /******************************************************************************************************************/
 
-/**********************************************************************************************************/
 
-// 更新人體辨識布林狀態
-fun updateBodyDetectionStatus(context: Context, isEnabled: Boolean) {
-    val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-    sharedPreferences.edit {
-        putBoolean("bodyDetection", isEnabled)
-    }
-}
-
-// 讀取人體辨識布林狀態
-fun getBodyDetectionStatus(context: Context): Boolean {
-    val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-    return sharedPreferences.getBoolean("bodyDetection", false)
-}
-
-/**********************************************************************************************************/
 
 // 更新顯示方向模式 (0: 水平, 1: 垂直)
 fun updateOrientationMode(context: Context, mode: Int) {
@@ -351,7 +335,7 @@ fun getCameraFps(context: Context): Int {
 
 /******************************************************************************************************************/
 
-// 更新錄影畫質 ("SD", "HD", "FHD", "UHD")
+// 更新錄影畫質 ("SD", "HD", "FHD")
 fun updateVideoQuality(context: Context, quality: String) {
     val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
     sharedPreferences.edit {

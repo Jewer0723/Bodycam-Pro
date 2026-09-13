@@ -70,7 +70,7 @@
             </intent-filter>
         </activity>
         <service
-            android:name=".backend.services.ScreenRecordService"
+            android:name=".backend.services.RecordService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="microphone|camera">

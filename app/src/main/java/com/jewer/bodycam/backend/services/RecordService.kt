@@ -153,12 +153,16 @@ class RecordService: Service() {
     }
 
     private fun stopRecordingLogic() {
+        if (!_isServiceRunning.value && activeRecording == null) return
         try {
             activeRecording?.stop()
             activeRecording = null
-            val brand = getBodycamBrand(applicationContext)
-            val soundRes = if (brand == "MOTOROLA") R.raw.motorolastoprecordsound else R.raw.axonstoprecordsound
-            playSound(applicationContext, soundRes)
+            val beepApproved = getBeepSoundStatus(applicationContext)
+            if (beepApproved) {
+                val brand = getBodycamBrand(applicationContext)
+                val soundRes = if (brand == "MOTOROLA") R.raw.motorolastoprecordsound else R.raw.axonstoprecordsound
+                playSound(applicationContext, soundRes)
+            }
         } catch (e: Exception) {
             Log.e("ScreenRecordService", "activeRecording.stop failed", e)
         } finally {

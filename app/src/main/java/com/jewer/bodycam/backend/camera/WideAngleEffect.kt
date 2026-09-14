@@ -24,6 +24,7 @@ import androidx.camera.core.SurfaceRequest
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
+import androidx.core.graphics.withTranslation
 import androidx.core.util.Consumer
 import com.jewer.bodycam.R
 import com.jewer.bodycam.backend.functions.getCurrentBatteryLevel
@@ -789,14 +790,316 @@ class WideAngleSurfaceProcessor(
         canvas.drawText("$battery%", width - padX + 50f, height - padY - 150f, batteryPaint)
     }
 
-    // ── 分組 3: 垂直 SD ──
-    private fun drawPortraitSdOverlay(canvas: Canvas, width: Int, height: Int, nowStr: String, battery: Int, phoneName: String) {
-        drawLandscapeSdOverlay(canvas, width, height, nowStr, battery, phoneName)
+    // ── 分組 3: 垂直 SD (獨立繪圖函數，可自由微調每個元件座標) ──
+    private fun drawPortraitSdOverlay(
+        canvas: Canvas,
+        width: Int,
+        height: Int,
+        nowStr: String,
+        battery: Int,
+        phoneName: String
+    ) {
+        canvas.withTranslation(0f, height.toFloat()) {
+            rotate(-90f)
+
+            // 垂直畫布維度: vWidth = height, vHeight = width
+            val vWidth = height
+            val vHeight = width
+
+            val padX = vWidth * 0.04f
+            val padY = vHeight * 0.04f
+
+            val textFontSize = vHeight * 0.023f
+            val iconSize = (vHeight * 0.12f).toInt()
+            val recIconSize = (vHeight * 0.05f).toInt()
+
+            val textPaint = Paint().apply {
+                color = White.toArgb()
+                textSize = textFontSize
+                isAntiAlias = true
+                typeface = Typeface.MONOSPACE
+                setShadowLayer(4f, 2f, 2f, Black.toArgb())
+            }
+
+            val batteryPaint = Paint().apply {
+                color = if (battery <= 20) {
+                    Red.toArgb()
+                } else if (battery <= 50) {
+                    DarkYellow.toArgb()
+                } else {
+                    White.toArgb()
+                }
+                textSize = textFontSize
+                isAntiAlias = true
+                typeface = Typeface.MONOSPACE
+                textAlign = Paint.Align.RIGHT
+                setShadowLayer(4f, 2f, 2f, Black.toArgb())
+            }
+
+            val showRecIcon = !isRecording || ((System.currentTimeMillis() / 1000) % 2 == 0L)
+            val recDrawable = if (isRecording) {
+                ContextCompat.getDrawable(context, R.mipmap.ic_recording_foreground)
+                    ?.apply { setTint(Red.toArgb()) }
+            } else {
+                ContextCompat.getDrawable(context, R.drawable.ic_start_record_foreground)
+                    ?.apply { setTint(DarkYellow.toArgb()) }
+            }
+
+            when (brand) {
+                "AXON" -> {
+                    val logoDrawable =
+                        ContextCompat.getDrawable(context, R.mipmap.ic_water_mark_foreground)
+                            ?.apply { setTint(DarkYellow.toArgb()) }
+                    val logoRight = vWidth - padX + 5f
+                    val logoLeft = logoRight - iconSize
+                    logoDrawable?.let {
+                        it.setBounds(
+                            logoLeft.toInt(),
+                            (padY - 100f).toInt(),
+                            logoRight.toInt(),
+                            (padY + iconSize - 100f).toInt()
+                        )
+                        it.draw(this)
+                    }
+
+                    textPaint.textAlign = Paint.Align.LEFT
+                    val axonTextX = logoLeft - 600f
+                    drawText("$userName $nowStr", axonTextX, padY + textFontSize * 0.25f, textPaint)
+                    drawText(phoneName, axonTextX, padY + textFontSize * 1.4f, textPaint)
+
+                    if (showRecIcon) {
+                        recDrawable?.let {
+                            it.setBounds(
+                                (padX + 50f).toInt(),
+                                (padY - 50f).toInt(),
+                                (padX + 50f + recIconSize).toInt(),
+                                (padY + recIconSize - 50f).toInt()
+                            )
+                            it.draw(this)
+                        }
+                    }
+                }
+
+                "MOTOROLA" -> {
+                    val bannerHeight = textFontSize * 0.005f + padY
+                    val bgPaint = Paint().apply { color = Black.copy(alpha = 0.5f).toArgb() }
+                    drawRect(0f, 0f, vWidth.toFloat(), bannerHeight, bgPaint)
+
+                    val logoDrawable =
+                        ContextCompat.getDrawable(context, R.mipmap.ic_motorola_icon_foreground)
+                            ?.apply { setTint(White.toArgb()) }
+                    val logoSize = (bannerHeight * 0.9f).toInt()
+                    val logoTop = ((bannerHeight - logoSize) / 1f).toInt()
+                    val logoLeft = (padX + 20f).toInt()
+                    logoDrawable?.let {
+                        it.setBounds(logoLeft, logoTop, logoLeft + logoSize, logoTop + logoSize)
+                        it.draw(this)
+                    }
+
+                    val motoPaintBoldItalic = Paint(textPaint).apply {
+                        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD_ITALIC)
+                        textAlign = Paint.Align.LEFT
+                        style = Paint.Style.FILL_AND_STROKE
+                        strokeWidth = 2.5f
+                        textScaleX = 2f
+                        textSize = textFontSize * 0.55f
+                    }
+                    val motoPaintItalic = Paint(textPaint).apply {
+                        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.ITALIC)
+                        textAlign = Paint.Align.LEFT
+                        textScaleX = 1.8f
+                        textSize = textFontSize * 0.55f
+                    }
+
+                    val textY = logoTop + logoSize * 0.6f
+                    val motoTextLeft = logoLeft + logoSize + 0.45f
+                    drawText("MOTOROLA", motoTextLeft, textY, motoPaintBoldItalic)
+                    val motoWidth = motoPaintBoldItalic.measureText("MOTOROLA")
+                    drawText("SOLUTIONS", motoTextLeft + motoWidth + 13f, textY, motoPaintItalic)
+
+                    textPaint.textAlign = Paint.Align.RIGHT
+                    textPaint.isFakeBoldText = false
+                    drawText("$nowStr $userName", vWidth - padX - 50f, textY, textPaint)
+
+                    if (showRecIcon) {
+                        recDrawable?.let {
+                            val topPos = (bannerHeight - 10f).toInt()
+                            it.setBounds(
+                                (vWidth - recIconSize - padX - 30f).toInt(),
+                                topPos,
+                                (vWidth - padX - 30f).toInt(),
+                                topPos + recIconSize
+                            )
+                            it.draw(this)
+                        }
+                    }
+                }
+
+                "TRANSCEND" -> {
+                    val logoDrawable =
+                        ContextCompat.getDrawable(context, R.mipmap.ic_transcend_icon_foreground)
+                            ?.apply { setTint(DarkRed.toArgb()) }
+                    val logoLeft = padX - 10f
+                    val logoTop = vHeight - iconSize - padY + 100f
+                    logoDrawable?.let {
+                        it.setBounds(
+                            logoLeft.toInt(),
+                            logoTop.toInt(),
+                            (logoLeft + iconSize).toInt(),
+                            (vHeight - padY + 100f).toInt()
+                        )
+                        it.draw(this)
+                    }
+
+                    textPaint.textAlign = Paint.Align.LEFT
+                    textPaint.color = DarkOrange.toArgb()
+                    val textLeft = logoLeft + iconSize - 20f
+                    drawText("$userName $phoneName", textLeft, logoTop + textFontSize * 2f, textPaint)
+                    drawText(
+                        nowStr,
+                        textLeft,
+                        logoTop + textFontSize * 3.5f,
+                        textPaint
+                    )
+
+                    if (showRecIcon) {
+                        recDrawable?.let {
+                            it.setBounds(
+                                (padX + 30f).toInt(),
+                                (padY - 80f).toInt(),
+                                (padX + 30f + recIconSize).toInt(),
+                                (padY + recIconSize - 80f).toInt()
+                            )
+                            it.draw(this)
+                        }
+                    }
+                }
+
+                "GETAC" -> {
+                    val bannerHeight = textFontSize * 0.0001f + padY
+                    val bgPaint = Paint().apply { color = Black.copy(alpha = 0.5f).toArgb() }
+                    drawRect(0f, 0f, vWidth.toFloat(), bannerHeight, bgPaint)
+
+                    val logoDrawable =
+                        ContextCompat.getDrawable(context, R.mipmap.ic_getac_icon_foreground)
+                            ?.apply { setTint(DarkOrange.toArgb()) }
+                    val logoHeight = (bannerHeight * 2f).toInt()
+                    val logoWidth = (logoHeight * 1f).toInt()
+                    val logoTop = ((bannerHeight - logoHeight) / 2f).toInt() + 5
+                    val logoLeft = (padX + 50f).toInt()
+                    logoDrawable?.let {
+                        it.setBounds(logoLeft, logoTop, logoLeft + logoWidth, logoTop + logoHeight)
+                        it.draw(this)
+                    }
+
+                    textPaint.textAlign = Paint.Align.RIGHT
+                    drawText(
+                        "$nowStr $userName",
+                        vWidth - padX - 30f,
+                        logoTop + logoHeight * 0.6f,
+                        textPaint
+                    )
+
+                    if (showRecIcon) {
+                        recDrawable?.let {
+                            val topPos = (bannerHeight - 10f).toInt()
+                            it.setBounds(
+                                (vWidth - recIconSize - padX - 30f).toInt(),
+                                topPos,
+                                (vWidth - padX - 30f).toInt(),
+                                topPos + recIconSize
+                            )
+                            it.draw(this)
+                        }
+                    }
+                }
+
+                "DOZOR" -> {
+                    val logoDrawable =
+                        ContextCompat.getDrawable(context, R.mipmap.ic_dozor_icon_foreground)
+                            ?.apply { setTint(White.toArgb()) }
+                    val dIconSize = (iconSize * 1.25f).toInt()
+                    val logoLeft = vWidth - dIconSize - padX + 50f
+                    logoDrawable?.let {
+                        it.setBounds(
+                            logoLeft.toInt(),
+                            (padY - 50f).toInt(),
+                            (logoLeft + dIconSize).toInt(),
+                            (padY + dIconSize - 50f).toInt()
+                        )
+                        it.draw(this)
+                    }
+
+                    val textY = vHeight - padY - 40f
+                    textPaint.textAlign = Paint.Align.CENTER
+                    drawText("DZ $userName $phoneName *$nowStr", vWidth / 2f, textY, textPaint)
+
+                    if (showRecIcon) {
+                        recDrawable?.let {
+                            it.setBounds(
+                                (padX - 50f).toInt(),
+                                padY.toInt(),
+                                (padX - 50f + recIconSize).toInt(),
+                                (padY + recIconSize).toInt()
+                            )
+                            it.draw(this)
+                        }
+                    }
+                }
+
+                "PANASONIC" -> {
+                    textPaint.textAlign = Paint.Align.LEFT
+                    drawText(nowStr, padX - 50f, padY + textFontSize * 1.8f, textPaint)
+                    drawText(
+                        "$userName $phoneName",
+                        padX - 50f,
+                        padY + textFontSize * 2.8f,
+                        textPaint
+                    )
+
+                    val logoDrawable =
+                        ContextCompat.getDrawable(context, R.mipmap.ic_panasonic1_icon_foreground)
+                            ?.apply { setTint(LightGreen.toArgb()) }
+                    val pIconSize = (iconSize * 1.8f).toInt()
+                    val logoLeft = vWidth - pIconSize - padX + 150f
+                    logoDrawable?.let {
+                        it.setBounds(
+                            logoLeft.toInt(),
+                            (padY - 100f).toInt(),
+                            (logoLeft + pIconSize).toInt(),
+                            (padY + pIconSize - 100f).toInt()
+                        )
+                        it.draw(this)
+                    }
+
+                    if (showRecIcon) {
+                        recDrawable?.let {
+                            it.setBounds(
+                                (padX - 80f).toInt(),
+                                (vHeight - recIconSize - padY).toInt(),
+                                (padX + recIconSize - 80f).toInt(),
+                                (vHeight - padY).toInt()
+                            )
+                            it.draw(this)
+                        }
+                    }
+                }
+            }
+
+            drawText("$battery%", vWidth - padX - 50f, vHeight - padY + 30f, batteryPaint)
+        }
     }
 
-    // ── 分組 4: 垂直 HD / FHD ──
-    private fun drawPortraitHdOverlay(canvas: Canvas, width: Int, height: Int, nowStr: String, battery: Int, phoneName: String) {
-        drawLandscapeSdOverlay(canvas, width, height, nowStr, battery, phoneName)
+    // ── 分組 4: 垂直 HD / FHD (獨立繪圖函數，可自由微調每個元件座標) ──
+    private fun drawPortraitHdOverlay(
+        canvas: Canvas,
+        width: Int,
+        height: Int,
+        nowStr: String,
+        battery: Int,
+        phoneName: String
+    ) {
+        drawPortraitSdOverlay(canvas, width, height, nowStr, battery, phoneName)
     }
 
     private fun initEGL() {

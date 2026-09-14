@@ -512,7 +512,6 @@ private fun HorizontalToolbarButtons(
                     it.action = RecordService.STOP_RECORDING
                     context.startService(it)
                 }
-                if (beepSoundApproved) playSound(context, R.raw.axonstoprecordsound)
                 if (vibrateApproved) vibrateOnce(context, 1000)
             } else {
                 Intent(context.applicationContext, RecordService::class.java).also {
@@ -638,7 +637,6 @@ private fun PortraitToolbarButtons(
                     it.action = RecordService.STOP_RECORDING
                     context.startService(it)
                 }
-                if (beepSoundApproved) playSound(context, R.raw.axonstoprecordsound)
                 if (vibrateApproved) vibrateOnce(context, 1000)
             } else {
                 Intent(context.applicationContext, RecordService::class.java).also {

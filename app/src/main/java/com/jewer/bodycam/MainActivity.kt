@@ -111,19 +111,26 @@ class MainActivity : ComponentActivity() {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (getKeyRecordingStatus(this)) {
+            val isRecording = RecordService.isRecordingRunning.value
             when (keyCode) {
                 KeyEvent.KEYCODE_VOLUME_UP -> {
-                    val intent = Intent(applicationContext, RecordService::class.java).apply {
-                        action = RecordService.START_RECORDING
+                    // 只有在【未錄影】狀態下才觸發開始錄影，防止重複錄影
+                    if (!isRecording) {
+                        val intent = Intent(applicationContext, RecordService::class.java).apply {
+                            action = RecordService.START_RECORDING
+                        }
+                        startForegroundService(intent)
                     }
-                    startForegroundService(intent)
                     return true
                 }
                 KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                    val intent = Intent(applicationContext, RecordService::class.java).apply {
-                        action = RecordService.STOP_RECORDING
+                    // 只有在【錄影中】狀態下才觸發停止錄影
+                    if (isRecording) {
+                        val intent = Intent(applicationContext, RecordService::class.java).apply {
+                            action = RecordService.STOP_RECORDING
+                        }
+                        startService(intent)
                     }
-                    startService(intent)
                     return true
                 }
             }

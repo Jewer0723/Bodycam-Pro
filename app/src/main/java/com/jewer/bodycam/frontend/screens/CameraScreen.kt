@@ -66,7 +66,6 @@ import com.jewer.bodycam.backend.functions.getCameraFps
 import com.jewer.bodycam.backend.functions.getCurrentTime
 import com.jewer.bodycam.backend.functions.getFisheyeK
 import com.jewer.bodycam.backend.functions.getFisheyeScale
-import com.jewer.bodycam.backend.functions.getFlashlightStatus
 import com.jewer.bodycam.backend.functions.getInstructionAlertDialogStatus
 import com.jewer.bodycam.backend.functions.getLastBackZoomRatio
 import com.jewer.bodycam.backend.functions.getLastFrontZoomRatio
@@ -120,7 +119,6 @@ fun CameraScreen(navController: NavHostController) {
     val beepSoundApproved = remember { getBeepSoundStatus(context) }
     val instructionAlertDialogApproved = remember { getInstructionAlertDialogStatus(context) }
     val isLowBrightnessApproved = remember { getLowBrightnessStatus(context) }
-    val isFlashlightApproved = remember { getFlashlightStatus(context) }
 
     var isSimulatedWideAngleApproved by remember { mutableStateOf(getSimulatedWideAngleStatus(context)) }
     var fisheyeK by remember { mutableFloatStateOf(getFisheyeK(context)) }
@@ -251,6 +249,7 @@ fun CameraScreen(navController: NavHostController) {
         try {
             delay(200.milliseconds)
             val camera = CameraManager.bindCamera(
+                context = context,
                 cameraProvider = provider,
                 lifecycleOwner = processLifecycleOwner,
                 cameraSelector = cameraSelector,
@@ -259,7 +258,6 @@ fun CameraScreen(navController: NavHostController) {
                 selectedQuality = selectedQualitySetting
             )
             activeCamera = camera
-            if (isFlashlightApproved) camera?.cameraControl?.enableTorch(true)
         } catch (e: Exception) {
             Log.e("CameraPreview", "Error initializing camera", e)
         }
@@ -283,6 +281,17 @@ fun CameraScreen(navController: NavHostController) {
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
+    }
+
+    val handleCameraSwitch: (Int) -> Unit = { nextLens ->
+        if (isRecordingRunning) {
+            val intent = Intent(context, RecordService::class.java).apply {
+                action = RecordService.STOP_RECORDING
+            }
+            context.startService(intent)
+        }
+        lensFacing = nextLens
+        useUltraWide = (nextLens == CameraSelector.LENS_FACING_BACK)
     }
 
     Box(
@@ -342,25 +351,7 @@ fun CameraScreen(navController: NavHostController) {
                         textShadow = textShadow,
                         navController = navController,
                         lensFacing = lensFacing,
-                        onCameraSwitch = { nextLens ->
-                            if (isRecordingRunning) {
-                                val stopIntent = Intent(context, RecordService::class.java).apply {
-                                    action = RecordService.STOP_RECORDING
-                                }
-                                context.startService(stopIntent)
-
-                                lensFacing = nextLens
-                                useUltraWide = (nextLens == CameraSelector.LENS_FACING_BACK)
-
-                                val startIntent = Intent(context, RecordService::class.java).apply {
-                                    action = RecordService.START_RECORDING
-                                }
-                                context.startForegroundService(startIntent)
-                            } else {
-                                lensFacing = nextLens
-                                useUltraWide = (nextLens == CameraSelector.LENS_FACING_BACK)
-                            }
-                        },
+                        onCameraSwitch = handleCameraSwitch,
                         toggleRadio = { toggleRadio() }
                     )
                 }
@@ -379,25 +370,7 @@ fun CameraScreen(navController: NavHostController) {
                         textShadow = textShadow,
                         navController = navController,
                         lensFacing = lensFacing,
-                        onCameraSwitch = { nextLens ->
-                            if (isRecordingRunning) {
-                                val stopIntent = Intent(context, RecordService::class.java).apply {
-                                    action = RecordService.STOP_RECORDING
-                                }
-                                context.startService(stopIntent)
-
-                                lensFacing = nextLens
-                                useUltraWide = (nextLens == CameraSelector.LENS_FACING_BACK)
-
-                                val startIntent = Intent(context, RecordService::class.java).apply {
-                                    action = RecordService.START_RECORDING
-                                }
-                                context.startForegroundService(startIntent)
-                            } else {
-                                lensFacing = nextLens
-                                useUltraWide = (nextLens == CameraSelector.LENS_FACING_BACK)
-                            }
-                        },
+                        onCameraSwitch = handleCameraSwitch,
                         toggleRadio = { toggleRadio() }
                     )
                 }

@@ -122,6 +122,7 @@ class RecordService: Service(), LifecycleOwner {
             val qualitySetting = getVideoQuality(applicationContext)
             if (surfaceProcessor != null) {
                 CameraManager.bindCamera(
+                    context = applicationContext,
                     cameraProvider = cameraProvider,
                     lifecycleOwner = this,
                     cameraSelector = CameraManager.currentCameraSelector,
@@ -134,53 +135,52 @@ class RecordService: Service(), LifecycleOwner {
             Log.e("ScreenRecordService", "Error binding camera to RecordService", e)
         }
 
-        val videoCapture = CameraManager.videoCapture
-        if (videoCapture != null) {
-            try {
-                val filenameFormat = "yyyy-MM-dd-HH-mm-ss"
-                val videoName = SimpleDateFormat(filenameFormat, Locale.US).format(Date()) + ".mp4"
-
-                val contentValues = ContentValues().apply {
-                    put(MediaStore.MediaColumns.DISPLAY_NAME, videoName)
-                    put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/${getString(R.string.app_name)}")
-                    }
-                }
-
-                val mediaStoreOutputOptions = MediaStoreOutputOptions
-                    .Builder(contentResolver, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
-                    .setContentValues(contentValues)
-                    .build()
-
-                val recorder = videoCapture.output
-                val pendingRecording: PendingRecording = if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                    recorder.prepareRecording(this, mediaStoreOutputOptions).withAudioEnabled()
-                } else {
-                    recorder.prepareRecording(this, mediaStoreOutputOptions)
-                }
-
-                activeRecording = pendingRecording.start(ContextCompat.getMainExecutor(this)) { recordEvent ->
-                    when (recordEvent) {
-                        is VideoRecordEvent.Start -> {
-                            _isServiceRunning.value = true
-                        }
-                        is VideoRecordEvent.Finalize -> {
-                            _isServiceRunning.value = false
-                            if (recordEvent.hasError()) {
-                                Log.e("ScreenRecordService", "VideoCapture error: ${recordEvent.error}")
-                            }
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e("ScreenRecordService", "Failed to start VideoCapture recording", e)
-            }
-        } else {
-            Log.w("ScreenRecordService", "videoCapture is null")
-        }
-
+        startRecordingFile()
         startPeriodicBeep()
+    }
+
+    private fun startRecordingFile() {
+        val videoCapture = CameraManager.videoCapture ?: return
+        try {
+            val filenameFormat = "yyyy-MM-dd-HH-mm-ss"
+            val videoName = SimpleDateFormat(filenameFormat, Locale.US).format(Date()) + ".mp4"
+
+            val contentValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, videoName)
+                put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/${getString(R.string.app_name)}")
+                }
+            }
+
+            val mediaStoreOutputOptions = MediaStoreOutputOptions
+                .Builder(contentResolver, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
+                .setContentValues(contentValues)
+                .build()
+
+            val recorder = videoCapture.output
+            val pendingRecording: PendingRecording = if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                recorder.prepareRecording(this, mediaStoreOutputOptions).withAudioEnabled()
+            } else {
+                recorder.prepareRecording(this, mediaStoreOutputOptions)
+            }
+
+            activeRecording = pendingRecording.start(ContextCompat.getMainExecutor(this)) { recordEvent ->
+                when (recordEvent) {
+                    is VideoRecordEvent.Start -> {
+                        _isServiceRunning.value = true
+                    }
+                    is VideoRecordEvent.Finalize -> {
+                        _isServiceRunning.value = false
+                        if (recordEvent.hasError()) {
+                            Log.e("ScreenRecordService", "VideoCapture error: ${recordEvent.error}")
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("ScreenRecordService", "Failed to start VideoCapture recording", e)
+        }
     }
 
     private fun stopRecordingLogic() {
@@ -248,22 +248,40 @@ class RecordService: Service(), LifecycleOwner {
         val pendingIntent = PendingIntent.getActivity(
             this, 0, intent, PendingIntent.FLAG_IMMUTABLE
         )
+
+        val stopIntent = Intent(this, RecordService::class.java).apply {
+            action = STOP_RECORDING
+        }
+        val stopPendingIntent = PendingIntent.getService(
+            this,
+            1,
+            stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val notifyTitle = "Recording..."
         val notifyText = when(getBodycamBrand(this)) {
-            "AXON" -> "Tap top right “AXON” icon to stop recording"
-            "MOTOROLA" -> "Tap top left “MOTOROLA” icon to stop recording"
-            "TRANSCEND" -> "Tap bottom left “TRANSCEND” icon to stop recording"
-            "GETAC" -> "Tap top left “GETAC” icon to stop recording"
-            "DOZOR" -> "Tap top right “DOZOR” icon to stop recording"
-            "PANASONIC" -> "Tap top right “PANASONIC” icon to stop recording"
-            else -> "Tap the icon to stop recording"
+            "AXON" -> "Tap top right “AXON” icon or notification button to stop"
+            "MOTOROLA" -> "Tap top left “MOTOROLA” icon or notification button to stop"
+            "TRANSCEND" -> "Tap bottom left “TRANSCEND” icon or notification button to stop"
+            "GETAC" -> "Tap top left “GETAC” icon or notification button to stop"
+            "DOZOR" -> "Tap top right “DOZOR” icon or notification button to stop"
+            "PANASONIC" -> "Tap top right “PANASONIC” icon or notification button to stop"
+            else -> "Tap button to stop recording"
         }
+
+        val stopAction = NotificationCompat.Action.Builder(
+            R.drawable.ic_stop_record_foreground,
+            "Stop Recording",
+            stopPendingIntent
+        ).build()
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(notifyTitle)
             .setContentText(notifyText)
             .setSmallIcon(R.mipmap.ic_water_mark_foreground)
             .setContentIntent(pendingIntent)
+            .addAction(stopAction)
             .setOngoing(true)
             .build()
     }

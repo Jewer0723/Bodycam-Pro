@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -422,10 +423,28 @@ class RadioService : Service() {
     }
 
     private fun createNotification(content: String): Notification {
+        val stopIntent = Intent(this, RadioService::class.java).apply {
+            action = ACTION_STOP
+        }
+        val stopPendingIntent = PendingIntent.getService(
+            this,
+            2,
+            stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val stopAction = NotificationCompat.Action.Builder(
+            R.drawable.ic_radio_foreground,
+            "Disconnect Radio",
+            stopPendingIntent
+        ).build()
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Bodycam Radio")
             .setContentText(content)
             .setSmallIcon(R.drawable.ic_radio_foreground)
+            .addAction(stopAction)
+            .setOngoing(true)
             .build()
     }
 

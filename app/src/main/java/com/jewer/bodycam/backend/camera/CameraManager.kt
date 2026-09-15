@@ -21,6 +21,7 @@ import androidx.camera.video.Recorder
 import androidx.camera.video.VideoCapture
 import androidx.camera.view.PreviewView
 import androidx.lifecycle.LifecycleOwner
+import com.jewer.bodycam.backend.functions.getFlashlightStatus
 import java.util.concurrent.Executors
 
 object CameraManager {
@@ -117,6 +118,7 @@ object CameraManager {
 
     @OptIn(ExperimentalCamera2Interop::class)
     fun bindCamera(
+        context: Context,
         cameraProvider: ProcessCameraProvider,
         lifecycleOwner: LifecycleOwner,
         cameraSelector: CameraSelector,
@@ -158,6 +160,11 @@ object CameraManager {
 
             val camera = cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, useCaseGroup)
             activeCamera = camera
+
+            if (getFlashlightStatus(context) && camera.cameraInfo.hasFlashUnit()) {
+                camera.cameraControl.enableTorch(true)
+            }
+
             return camera
         } catch (e: Exception) {
             Log.e("CameraManager", "bindCamera error", e)

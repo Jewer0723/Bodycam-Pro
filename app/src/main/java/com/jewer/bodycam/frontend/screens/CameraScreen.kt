@@ -1,25 +1,14 @@
 package com.jewer.bodycam.frontend.screens
 
 import android.content.Intent
-import android.hardware.camera2.CaptureRequest
 import android.util.Log
-import android.util.Range
 import androidx.annotation.OptIn
 import androidx.camera.camera2.interop.Camera2CameraInfo
-import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.Camera
-import androidx.camera.core.CameraEffect
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
-import androidx.camera.core.Preview
-import androidx.camera.core.UseCaseGroup
 import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.video.FallbackStrategy
-import androidx.camera.video.Quality
-import androidx.camera.video.QualitySelector
-import androidx.camera.video.Recorder
-import androidx.camera.video.VideoCapture
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -70,8 +59,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.jewer.bodycam.R
-import com.jewer.bodycam.backend.camera.CustomCameraEffect
-import com.jewer.bodycam.backend.camera.WideAngleSurfaceProcessor
+import com.jewer.bodycam.backend.camera.CameraManager
 import com.jewer.bodycam.backend.functions.getBeepSoundStatus
 import com.jewer.bodycam.backend.functions.getBodycamBrand
 import com.jewer.bodycam.backend.functions.getCameraFps
@@ -105,7 +93,6 @@ import com.jewer.bodycam.ui.theme.Red
 import com.jewer.bodycam.ui.theme.White
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import java.util.concurrent.Executors
 import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalCamera2Interop::class, ExperimentalGetImage::class)
@@ -166,34 +153,14 @@ fun CameraScreen(navController: NavHostController) {
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     var activeCamera by remember { mutableStateOf<Camera?>(null) }
 
-    val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
-
     // 依據設定選擇畫質 (SD: 480p [預設, 4:3], HD: 720p [16:9], FHD: 1080p [16:9])
-    val targetQuality = when (selectedQualitySetting) {
-        "FHD" -> Quality.FHD
-        "HD" -> Quality.HD
-        else -> Quality.SD
-    }
-
-    val recorder = remember(targetQuality) {
-        Recorder.Builder()
-            .setQualitySelector(
-                QualitySelector.from(
-                    targetQuality,
-                    FallbackStrategy.lowerQualityOrHigherThan(Quality.SD)
-                )
-            )
-            .build()
-    }
-    val videoCapture = remember(recorder) {
-        VideoCapture.withOutput(recorder).also {
-            RecordService.setVideoCapture(it)
-        }
+    remember(selectedQualitySetting) {
+        CameraManager.getOrCreateVideoCapture(selectedQualitySetting)
     }
 
     // ── OpenGL 品牌浮水印與魚眼濾鏡 ──
     val surfaceProcessor = remember(context) {
-        WideAngleSurfaceProcessor(
+        CameraManager.getOrCreateSurfaceProcessor(
             context = context,
             isPortrait = isPortrait,
             isFrontCamera = lensFacing == CameraSelector.LENS_FACING_FRONT,
@@ -217,14 +184,6 @@ fun CameraScreen(navController: NavHostController) {
             userName = userName,
             isRecording = isRecordingRunning
         )
-    }
-
-    val wideAngleEffect = remember(surfaceProcessor) {
-        CustomCameraEffect(
-            CameraEffect.PREVIEW or CameraEffect.VIDEO_CAPTURE,
-            cameraExecutor,
-            surfaceProcessor
-        ) { Log.e("WideAngle", "Effect error", it) }
     }
 
     fun toggleRadio() {
@@ -258,14 +217,12 @@ fun CameraScreen(navController: NavHostController) {
         }.build()
     }
 
-    DisposableEffect(surfaceProcessor) {
+    DisposableEffect(previewView) {
         if (isLowBrightnessApproved) setScreenBrightness(context, true)
+        CameraManager.attachPreviewSurface(previewView)
         onDispose {
             setScreenBrightness(context, false)
-            if (!RecordService.isRecordingRunning.value) {
-                cameraExecutor.shutdown()
-                surfaceProcessor.release()
-            }
+            CameraManager.detachPreviewSurface()
         }
     }
 
@@ -282,34 +239,27 @@ fun CameraScreen(navController: NavHostController) {
         }
     }
 
-    // 將 CameraX 生命週期綁定至 ProcessLifecycleOwner，配合前台服務確保在背景與關閉螢幕時相機與 OpenGL 錄影持續運作
-    LaunchedEffect(cameraProvider, cameraSelector, processLifecycleOwner, selectedBackCameraIdSetting, selectedFrontCameraIdSetting, selectedCameraFpsSetting, selectedQualitySetting) {
+    // 當前台服務未錄影時將 CameraX 生命週期綁定至 ProcessLifecycleOwner，錄影時則由 RecordService 保持前景監聽
+    LaunchedEffect(cameraProvider, cameraSelector, selectedBackCameraIdSetting, selectedFrontCameraIdSetting, selectedCameraFpsSetting, selectedQualitySetting, isRecordingRunning) {
         val provider = cameraProvider ?: return@LaunchedEffect
-        // 錄影中不調用 unbindAll()，防止錄影中途因狀態刷新造成錄影中斷
-        if (isRecordingRunning) return@LaunchedEffect
+        if (isRecordingRunning) {
+            CameraManager.attachPreviewSurface(previewView)
+            activeCamera = CameraManager.activeCamera
+            return@LaunchedEffect
+        }
 
         try {
             delay(200.milliseconds)
-            val previewBuilder = Preview.Builder()
-            if (selectedCameraFpsSetting > 0) {
-                val camera2Extender = Camera2Interop.Extender(previewBuilder)
-                camera2Extender.setCaptureRequestOption(
-                    CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
-                    Range(selectedCameraFpsSetting, selectedCameraFpsSetting)
-                )
-            }
-            val preview = previewBuilder.build()
-            preview.surfaceProvider = previewView.surfaceProvider
-            provider.unbindAll()
-
-            val useCaseGroupBuilder = UseCaseGroup.Builder()
-                .addUseCase(preview)
-                .addUseCase(videoCapture)
-                .addEffect(wideAngleEffect)
-
-            val camera = provider.bindToLifecycle(processLifecycleOwner, cameraSelector, useCaseGroupBuilder.build())
+            val camera = CameraManager.bindCamera(
+                cameraProvider = provider,
+                lifecycleOwner = processLifecycleOwner,
+                cameraSelector = cameraSelector,
+                previewView = previewView,
+                fps = selectedCameraFpsSetting,
+                selectedQuality = selectedQualitySetting
+            )
             activeCamera = camera
-            if (isFlashlightApproved) camera.cameraControl.enableTorch(true)
+            if (isFlashlightApproved) camera?.cameraControl?.enableTorch(true)
         } catch (e: Exception) {
             Log.e("CameraPreview", "Error initializing camera", e)
         }
@@ -393,8 +343,23 @@ fun CameraScreen(navController: NavHostController) {
                         navController = navController,
                         lensFacing = lensFacing,
                         onCameraSwitch = { nextLens ->
-                            lensFacing = nextLens
-                            useUltraWide = (nextLens == CameraSelector.LENS_FACING_BACK)
+                            if (isRecordingRunning) {
+                                val stopIntent = Intent(context, RecordService::class.java).apply {
+                                    action = RecordService.STOP_RECORDING
+                                }
+                                context.startService(stopIntent)
+
+                                lensFacing = nextLens
+                                useUltraWide = (nextLens == CameraSelector.LENS_FACING_BACK)
+
+                                val startIntent = Intent(context, RecordService::class.java).apply {
+                                    action = RecordService.START_RECORDING
+                                }
+                                context.startForegroundService(startIntent)
+                            } else {
+                                lensFacing = nextLens
+                                useUltraWide = (nextLens == CameraSelector.LENS_FACING_BACK)
+                            }
                         },
                         toggleRadio = { toggleRadio() }
                     )
@@ -415,8 +380,23 @@ fun CameraScreen(navController: NavHostController) {
                         navController = navController,
                         lensFacing = lensFacing,
                         onCameraSwitch = { nextLens ->
-                            lensFacing = nextLens
-                            useUltraWide = (nextLens == CameraSelector.LENS_FACING_BACK)
+                            if (isRecordingRunning) {
+                                val stopIntent = Intent(context, RecordService::class.java).apply {
+                                    action = RecordService.STOP_RECORDING
+                                }
+                                context.startService(stopIntent)
+
+                                lensFacing = nextLens
+                                useUltraWide = (nextLens == CameraSelector.LENS_FACING_BACK)
+
+                                val startIntent = Intent(context, RecordService::class.java).apply {
+                                    action = RecordService.START_RECORDING
+                                }
+                                context.startForegroundService(startIntent)
+                            } else {
+                                lensFacing = nextLens
+                                useUltraWide = (nextLens == CameraSelector.LENS_FACING_BACK)
+                            }
                         },
                         toggleRadio = { toggleRadio() }
                     )

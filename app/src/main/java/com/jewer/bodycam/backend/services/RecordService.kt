@@ -1,6 +1,7 @@
 package com.jewer.bodycam.backend.services
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -14,20 +15,24 @@ import android.os.Build
 import android.os.IBinder
 import android.provider.MediaStore
 import android.util.Log
+import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.MediaStoreOutputOptions
 import androidx.camera.video.PendingRecording
-import androidx.camera.video.Recorder
 import androidx.camera.video.Recording
-import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
 import com.jewer.bodycam.MainActivity
 import com.jewer.bodycam.R
+import com.jewer.bodycam.backend.camera.CameraManager
 import com.jewer.bodycam.backend.functions.getBeepSoundStatus
 import com.jewer.bodycam.backend.functions.getBodycamBrand
 import com.jewer.bodycam.backend.functions.getVibrateAndBeepTimeInterval
 import com.jewer.bodycam.backend.functions.getVibrateStatus
+import com.jewer.bodycam.backend.functions.getVideoQuality
 import com.jewer.bodycam.backend.functions.playSound
 import com.jewer.bodycam.backend.functions.vibrateOnce
 import kotlinx.coroutines.CoroutineScope
@@ -45,12 +50,19 @@ import java.util.Date
 import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 
-class RecordService: Service() {
+class RecordService: Service(), LifecycleOwner {
+
+    override val lifecycle: Lifecycle
+        field = LifecycleRegistry(this)
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     override fun onCreate() {
         super.onCreate()
+        lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
+        lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START)
+        lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+
         // 監聽按鍵觸發錄影
         serviceScope.launch {
             triggerStartRecording.collect {
@@ -64,6 +76,7 @@ class RecordService: Service() {
         }
     }
 
+    @SuppressLint("InlinedApi")
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         createNotificationChannel()
         val notification = createNotification()
@@ -103,7 +116,25 @@ class RecordService: Service() {
         if (_isServiceRunning.value) return
         _isServiceRunning.value = true
 
-        val videoCapture = videoCaptureRef
+        try {
+            val cameraProvider = ProcessCameraProvider.getInstance(this).get()
+            val surfaceProcessor = CameraManager.surfaceProcessor
+            val qualitySetting = getVideoQuality(applicationContext)
+            if (surfaceProcessor != null) {
+                CameraManager.bindCamera(
+                    cameraProvider = cameraProvider,
+                    lifecycleOwner = this,
+                    cameraSelector = CameraManager.currentCameraSelector,
+                    previewView = CameraManager.currentPreviewView,
+                    fps = CameraManager.currentFps,
+                    selectedQuality = qualitySetting
+                )
+            }
+        } catch (e: Exception) {
+            Log.e("ScreenRecordService", "Error binding camera to RecordService", e)
+        }
+
+        val videoCapture = CameraManager.videoCapture
         if (videoCapture != null) {
             try {
                 val filenameFormat = "yyyy-MM-dd-HH-mm-ss"
@@ -146,7 +177,7 @@ class RecordService: Service() {
                 Log.e("ScreenRecordService", "Failed to start VideoCapture recording", e)
             }
         } else {
-            Log.w("ScreenRecordService", "videoCaptureRef is null, recording in fallback mode")
+            Log.w("ScreenRecordService", "videoCapture is null")
         }
 
         startPeriodicBeep()
@@ -204,6 +235,9 @@ class RecordService: Service() {
         activeRecording?.stop()
         activeRecording = null
         _isServiceRunning.value = false
+        lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+        lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
+        lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         serviceScope.coroutineContext.cancelChildren()
     }
 
@@ -249,12 +283,7 @@ class RecordService: Service() {
         private val _isServiceRunning = MutableStateFlow(false)
         val isRecordingRunning = _isServiceRunning.asStateFlow()
 
-        private var videoCaptureRef: VideoCapture<Recorder>? = null
         private var activeRecording: Recording? = null
-
-        fun setVideoCapture(videoCapture: VideoCapture<Recorder>?) {
-            videoCaptureRef = videoCapture
-        }
 
         private val _triggerStartRecording = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
         val triggerStartRecording = _triggerStartRecording.asSharedFlow()

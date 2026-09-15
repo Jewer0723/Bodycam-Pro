@@ -51,7 +51,7 @@ class CustomCameraEffect(
 ) : CameraEffect(targets, executor, processor, errorListener)
 
 class WideAngleSurfaceProcessor(
-    private val context: Context,
+    context: Context,
     @Volatile private var isPortrait: Boolean,
     @Volatile private var isFrontCamera: Boolean,
     @Volatile private var fisheyeK: Float,
@@ -61,6 +61,8 @@ class WideAngleSurfaceProcessor(
     @Volatile private var userName: String,
     @Volatile private var isRecording: Boolean
 ) : SurfaceProcessor {
+    private val appContext: Context = context.applicationContext
+    private val context: Context get() = appContext
     private val glThread = HandlerThread("GLThread").apply { start() }
     private val handler = Handler(glThread.looper)
 
@@ -95,6 +97,7 @@ class WideAngleSurfaceProcessor(
         this.isRecording = isRecording
     }
 
+    @Suppress("unused")
     fun release() {
         releaseGL()
     }
@@ -799,8 +802,12 @@ class WideAngleSurfaceProcessor(
         battery: Int,
         phoneName: String
     ) {
-        canvas.withTranslation(0f, height.toFloat()) {
-            rotate(-90f)
+        val translateX = if (isFrontCamera) width.toFloat() else 0f
+        val translateY = if (isFrontCamera) 0f else height.toFloat()
+        val rotateAngle = if (isFrontCamera) 90f else -90f
+
+        canvas.withTranslation(translateX, translateY) {
+            rotate(rotateAngle)
 
             // 垂直畫布維度: vWidth = height, vHeight = width
             val vWidth = height
@@ -1099,8 +1106,12 @@ class WideAngleSurfaceProcessor(
         battery: Int,
         phoneName: String
     ) {
-        canvas.withTranslation(0f, height.toFloat()) {
-            rotate(-90f)
+        val translateX = if (isFrontCamera) width.toFloat() else 0f
+        val translateY = if (isFrontCamera) 0f else height.toFloat()
+        val rotateAngle = if (isFrontCamera) 90f else -90f
+
+        canvas.withTranslation(translateX, translateY) {
+            rotate(rotateAngle)
 
             // 垂直畫布維度: vWidth = height, vHeight = width
             val vWidth = height

@@ -116,6 +116,11 @@ class RecordService: Service(), LifecycleOwner {
         if (_isServiceRunning.value) return
         _isServiceRunning.value = true
 
+        val vibrateApproved = getVibrateStatus(applicationContext)
+        if (vibrateApproved) {
+            vibrateOnce(applicationContext, 1000)
+        }
+
         try {
             val cameraProvider = ProcessCameraProvider.getInstance(this).get()
             val surfaceProcessor = CameraManager.surfaceProcessor
@@ -188,6 +193,12 @@ class RecordService: Service(), LifecycleOwner {
         try {
             activeRecording?.stop()
             activeRecording = null
+
+            val vibrateApproved = getVibrateStatus(applicationContext)
+            if (vibrateApproved) {
+                vibrateOnce(applicationContext, 1000)
+            }
+
             val beepApproved = getBeepSoundStatus(applicationContext)
             if (beepApproved) {
                 val brand = getBodycamBrand(applicationContext)

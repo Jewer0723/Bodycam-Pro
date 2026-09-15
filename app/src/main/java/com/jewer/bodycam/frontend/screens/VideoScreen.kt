@@ -2,9 +2,11 @@ package com.jewer.bodycam.frontend.screens
 
 import android.content.ContentUris
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
+import android.provider.Settings
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.Toast
@@ -29,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -37,6 +40,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -66,6 +70,7 @@ import coil.ImageLoader
 import coil.compose.AsyncImage
 import coil.decode.VideoFrameDecoder
 import com.jewer.bodycam.R
+import com.jewer.bodycam.backend.functions.PermissionUtils
 import com.jewer.bodycam.frontend.nav.NAV
 import com.jewer.bodycam.ui.theme.Black
 import com.jewer.bodycam.ui.theme.DarkYellow
@@ -104,8 +109,34 @@ fun VideoScreen(navController: NavController) {
 
     // 載入影片列表
     LaunchedEffect(Unit) {
-        videoList = loadVideos(context)
+        if (PermissionUtils.hasMediaPermissions(context)) {
+            videoList = loadVideos(context)
+        }
         isLoading = false
+    }
+
+    if (!PermissionUtils.hasMediaPermissions(context)) {
+        AlertDialog(
+            onDismissRequest = { navController.popBackStack() },
+            title = { Text(text = "Media Storage Permission Required", color = White) },
+            text = { Text(text = "Video storage access permission is required to load and play recorded videos in the Media Library.", color = White) },
+            confirmButton = {
+                TextButton(onClick = {
+                    context.startActivity(
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.fromParts("package", context.packageName, null)
+                        }
+                    )
+                }) {
+                    Text(color = DarkYellow, text = "Open Settings")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { navController.popBackStack() }) {
+                    Text(color = DarkYellow, text = "Back")
+                }
+            }
+        )
     }
 
     Column(

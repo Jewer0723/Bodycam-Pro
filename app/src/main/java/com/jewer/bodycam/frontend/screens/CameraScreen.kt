@@ -1,13 +1,13 @@
 package com.jewer.bodycam.frontend.screens
 
 import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import android.util.Log
-import androidx.annotation.OptIn
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
-import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
@@ -58,8 +58,13 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import com.google.accompanist.permissions.shouldShowRationale
 import com.jewer.bodycam.R
 import com.jewer.bodycam.backend.camera.CameraManager
+import com.jewer.bodycam.backend.functions.PermissionUtils
 import com.jewer.bodycam.backend.functions.getBeepSoundStatus
 import com.jewer.bodycam.backend.functions.getBodycamBrand
 import com.jewer.bodycam.backend.functions.getCameraFps
@@ -94,7 +99,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlin.time.Duration.Companion.milliseconds
 
-@OptIn(ExperimentalCamera2Interop::class, ExperimentalGetImage::class)
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun CameraScreen(navController: NavHostController) {
     val context = LocalContext.current
@@ -184,6 +189,19 @@ fun CameraScreen(navController: NavHostController) {
         )
     }
 
+    // ── 動態權限狀態與對話框 ──
+    @OptIn(ExperimentalPermissionsApi::class)
+    val radioPermissions = remember { PermissionUtils.getRadioPermissionList() }
+    @OptIn(ExperimentalPermissionsApi::class)
+    val radioPermissionState = rememberMultiplePermissionsState(permissions = radioPermissions)
+    var showRadioPermissionDialog by remember { mutableStateOf(false) }
+
+    @OptIn(ExperimentalPermissionsApi::class)
+    val mediaPermissions = remember { PermissionUtils.getMediaPermissionList() }
+    @OptIn(ExperimentalPermissionsApi::class)
+    val mediaPermissionState = rememberMultiplePermissionsState(permissions = mediaPermissions)
+    var showMediaPermissionDialog by remember { mutableStateOf(false) }
+
     fun toggleRadio() {
         if (isRadioRunning) {
             val intent = Intent(context, RadioService::class.java).apply { action = RadioService.ACTION_STOP }
@@ -191,6 +209,26 @@ fun CameraScreen(navController: NavHostController) {
         } else {
             val intent = Intent(context, RadioService::class.java).apply { action = RadioService.ACTION_START }
             context.startForegroundService(intent)
+        }
+    }
+
+    fun toggleRadioWithPermission() {
+        if (PermissionUtils.hasRadioPermissions(context)) {
+            toggleRadio()
+        } else {
+            showRadioPermissionDialog = true
+            radioPermissionState.launchMultiplePermissionRequest()
+        }
+    }
+
+    fun openGalleryWithPermission() {
+        if (PermissionUtils.hasMediaPermissions(context)) {
+            navController.navigate(NAV.VIDEO)
+            if (beepSoundApproved) playSound(context, R.raw.buttontouchedsound)
+            if (vibrateApproved) vibrateOnce(context, 1000)
+        } else {
+            showMediaPermissionDialog = true
+            mediaPermissionState.launchMultiplePermissionRequest()
         }
     }
 
@@ -204,6 +242,7 @@ fun CameraScreen(navController: NavHostController) {
         }, ContextCompat.getMainExecutor(context))
     }
 
+    @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
     val cameraSelector = remember(lensFacing, selectedBackCameraIdSetting, selectedFrontCameraIdSetting) {
         CameraSelector.Builder().addCameraFilter { cameraInfos ->
             val selectedId = if (lensFacing == CameraSelector.LENS_FACING_BACK) selectedBackCameraIdSetting else selectedFrontCameraIdSetting
@@ -352,7 +391,8 @@ fun CameraScreen(navController: NavHostController) {
                         navController = navController,
                         lensFacing = lensFacing,
                         onCameraSwitch = handleCameraSwitch,
-                        toggleRadio = { toggleRadio() }
+                        toggleRadio = { toggleRadioWithPermission() },
+                        onGalleryClick = { openGalleryWithPermission() }
                     )
                 }
             } else {
@@ -371,7 +411,8 @@ fun CameraScreen(navController: NavHostController) {
                         navController = navController,
                         lensFacing = lensFacing,
                         onCameraSwitch = handleCameraSwitch,
-                        toggleRadio = { toggleRadio() }
+                        toggleRadio = { toggleRadioWithPermission() },
+                        onGalleryClick = { openGalleryWithPermission() }
                     )
                 }
             }
@@ -403,6 +444,90 @@ fun CameraScreen(navController: NavHostController) {
             dismissButton = { TextButton(onClick = { instructionAlertDialogIsVisible = false; updateInstructionAlertDialogStatus(context, false) }) { Text(color = DarkYellow, text = "close permanently") } }
         )
     }
+
+    if (showRadioPermissionDialog) {
+        val allGranted = PermissionUtils.hasRadioPermissions(context)
+        if (allGranted) {
+            showRadioPermissionDialog = false
+            toggleRadio()
+        } else {
+            AlertDialog(
+                onDismissRequest = { showRadioPermissionDialog = false },
+                title = { Text(text = "Radio Permission Required", color = White) },
+                text = {
+                    Text(
+                        text = "Location and Nearby Connections permissions are required to discover and connect to nearby devices for walkie-talkie mode.",
+                        color = White
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val permanentlyDenied = radioPermissionState.permissions.any {
+                            !it.status.isGranted && !it.status.shouldShowRationale
+                        }
+                        if (permanentlyDenied) {
+                            context.startActivity(
+                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.fromParts("package", context.packageName, null)
+                                }
+                            )
+                        } else {
+                            radioPermissionState.launchMultiplePermissionRequest()
+                        }
+                    }) {
+                        Text(color = DarkYellow, text = "Grant Permission")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showRadioPermissionDialog = false }) {
+                        Text(color = DarkYellow, text = "Close")
+                    }
+                }
+            )
+        }
+    }
+
+    if (showMediaPermissionDialog) {
+        val allGranted = PermissionUtils.hasMediaPermissions(context)
+        if (allGranted) {
+            showMediaPermissionDialog = false
+            openGalleryWithPermission()
+        } else {
+            AlertDialog(
+                onDismissRequest = { showMediaPermissionDialog = false },
+                title = { Text(text = "Media Storage Permission Required", color = White) },
+                text = {
+                    Text(
+                        text = "Video storage access permission is required to view and play recorded videos in the Media Library.",
+                        color = White
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val permanentlyDenied = mediaPermissionState.permissions.any {
+                            !it.status.isGranted && !it.status.shouldShowRationale
+                        }
+                        if (permanentlyDenied) {
+                            context.startActivity(
+                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.fromParts("package", context.packageName, null)
+                                }
+                            )
+                        } else {
+                            mediaPermissionState.launchMultiplePermissionRequest()
+                        }
+                    }) {
+                        Text(color = DarkYellow, text = "Grant Permission")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showMediaPermissionDialog = false }) {
+                        Text(color = DarkYellow, text = "Close")
+                    }
+                }
+            )
+        }
+    }
 }
 
 @Composable
@@ -417,7 +542,8 @@ private fun HorizontalToolbarButtons(
     navController: NavHostController,
     lensFacing: Int,
     onCameraSwitch: (Int) -> Unit,
-    toggleRadio: () -> Unit
+    toggleRadio: () -> Unit,
+    onGalleryClick: () -> Unit
 ) {
     val context = LocalContext.current
 
@@ -485,11 +611,7 @@ private fun HorizontalToolbarButtons(
     // 4. 媒體庫按鈕
     IconButton(
         modifier = Modifier.size(50.dp),
-        onClick = {
-            navController.navigate(NAV.VIDEO)
-            if (beepSoundApproved) playSound(context, R.raw.buttontouchedsound)
-            if (vibrateApproved) vibrateOnce(context, 1000)
-        }
+        onClick = { onGalleryClick() }
     ) {
         Icon(
             painter = painterResource(R.drawable.ic_gallery_foreground),
@@ -536,7 +658,8 @@ private fun PortraitToolbarButtons(
     navController: NavHostController,
     lensFacing: Int,
     onCameraSwitch: (Int) -> Unit,
-    toggleRadio: () -> Unit
+    toggleRadio: () -> Unit,
+    onGalleryClick: () -> Unit
 ) {
     val context = LocalContext.current
 
@@ -567,11 +690,7 @@ private fun PortraitToolbarButtons(
     // 2. 媒體庫按鈕
     IconButton(
         modifier = Modifier.size(50.dp),
-        onClick = {
-            navController.navigate(NAV.VIDEO)
-            if (beepSoundApproved) playSound(context, R.raw.buttontouchedsound)
-            if (vibrateApproved) vibrateOnce(context, 1000)
-        }
+        onClick = { onGalleryClick() }
     ) {
         Icon(
             painter = painterResource(R.drawable.ic_gallery_foreground),

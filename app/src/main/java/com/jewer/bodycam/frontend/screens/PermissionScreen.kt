@@ -14,8 +14,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -41,11 +44,7 @@ fun PermissionScreen() {
 
     val permissionList = remember { PermissionUtils.getCorePermissionList() }
     val permissionState = rememberMultiplePermissionsState(permissions = permissionList)
-
-    // 自動啟動一次授權請求
-    LaunchedEffect(Unit) {
-        permissionState.launchMultiplePermissionRequest()
-    }
+    var hasRequestedBefore by rememberSaveable { mutableStateOf(false) }
 
     val allGranted = PermissionUtils.hasCorePermissions(context) || permissionState.allPermissionsGranted
 
@@ -75,7 +74,7 @@ fun PermissionScreen() {
                 Spacer(modifier = Modifier.height(24.dp))
                 Button(
                     onClick = {
-                        val permanentlyDenied = permissionState.permissions.any { permission ->
+                        val permanentlyDenied = hasRequestedBefore && permissionState.permissions.any { permission ->
                             !permission.status.isGranted && !permission.status.shouldShowRationale
                         }
 
@@ -86,6 +85,7 @@ fun PermissionScreen() {
                                 }
                             )
                         } else {
+                            hasRequestedBefore = true
                             permissionState.launchMultiplePermissionRequest()
                         }
                     },

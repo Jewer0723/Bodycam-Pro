@@ -595,20 +595,27 @@ fun SettingScreen(
             text = { Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                 SelectionContainer {
                     Text(
-                        text =  "●  AXON : Tap top right \u201CAXON\u201D icon to start/stop recording.\n\n" +
-                                "●  MOTOROLA : Tap top left \u201CMOTOROLA\u201D icon to start/stop recording.\n\n" +
-                                "●  TRANSCEND : Tap bottom left \u201CTRANSCEND\u201D icon to start/stop recording.\n\n" +
-                                "●  GETAC : Tap top left \u201CGETAC\u201D icon to start/stop recording.\n\n" +
-                                "●  DOZOR : Tap top right \u201CDOZOR\u201D icon to start/stop recording.\n\n" +
-                                "●  PANASONIC : Tap top right \u201CPANASONIC\u201D icon to start/stop recording.\n\n" +
-                                "●  Record result will be stored in \u201CBodycam\u201D folder in device media store space.\n\n" +
-                                "●  For android 14+ device, you can chose to record \u201CA single app\u201D or \u201CEntire screen\u201D.\n\n" +
-                                "●  Tap the screen then \u201Csettings\u201D 、 \u201Cradio system\u201D 、\u201Ccamera change\u201D and \u201Cmedia storage\u201D buttom will show on the screen.\n\n" +
-                                "●  If you want to use radio system, push the radio buttom on all of your devices then wait for connection, there will be online devices number on the top of the buttom when connected.\n\n" +
+                        text =  "●  You can use record button or volume key to record (open in settings, you can choose use in app or global control, be aware that you can not adjust volume when you activate this function).\n\n" +
+                                "●  When is recording, you can close the screen or turn to background, \u201CBodycam\u201D will still recording. \n\n" +
+                                "●  Record result will be stored in \u201CBodycam\u201D folder in device media store space (you have to authorize media access first).\n\n" +
+                                "●  There are multiple bodycam brand can choose.\n\n" +
+                                "●  If you want to use radio system, push the radio buttom on all of your devices then wait for connection, there will be online devices number on the top of the buttom when connected (you have to authorize location、nearby connection access first).\n\n" +
                                 "●  You can change the orientation of your device in settings.\n\n" +
-                                "●  You can manually select the camera lens in settings.\n\n" +
+                                "●  Not every device have wide lens, lens can be changed in settings, or you can use \"fisheye mode\" instead.\n\n" +
                                 "●  Pinch the screen to zoom in/out the camera.\n\n" +
-                                "●  User name can be changed.",
+                                "●  User name can be changed.\n\n" +
+                                "--------------------------------------------------\n" +
+                                "[ DISCLAIMER & TERMS OF USE ]\n\n" +
+                                "1. Lawful Use & Legal Compliance:\n" +
+                                "This Application is intended solely for lawful safety recording, evidence gathering, and legitimate self-defense purposes. Users are strictly prohibited from using this Application for any unlawful activities (including unauthorized surreptitious recording, wiretapping, stalking, harassment, or extortion). Users assume full legal liability for any violation of applicable laws.\n\n" +
+                                "2. Privacy & Image Rights:\n" +
+                                "Users must strictly comply with local privacy regulations and portrait/image rights when recording or broadcasting media. Users assume full responsibility for any disputes caused by sharing or publishing recorded files without consent.\n\n" +
+                                "3. Data Storage & Loss Disclaimer:\n" +
+                                "All media files are stored locally on the user's device (Movies/Bodycam directory). No cloud backup is provided. The development team is not liable for file loss or corruption due to device loss, hardware damage, factory resets, or OS updates.\n\n" +
+                                "4. Hardware & OS Compatibility:\n" +
+                                "Features like video quality, fisheye effect, continuous flashlight, global volume key, and background recording depend on device hardware and OEM background management. Universal performance on all Android models is not guaranteed.\n\n" +
+                                "5. Walkie-Talkie Radio Disclaimer:\n" +
+                                "The radio feature utilizes Android Nearby Connections (Wi-Fi/Bluetooth P2P). Transmission quality and latency depend on environmental interference and distance. Do not rely on it as a primary emergency communication system.",
                         color = White
                     )
                 }

@@ -37,6 +37,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,9 +46,6 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -135,7 +133,6 @@ fun CameraScreen(navController: NavHostController) {
 
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     val textShadow = remember { Shadow(color = Black, offset = Offset(3f, 3f), blurRadius = 2f) }
-    val consolasBold = remember { FontFamily(Font(R.font.consolas, FontWeight.Bold)) }
 
     var instructionAlertDialogIsVisible by remember { mutableStateOf(true) }
 
@@ -195,12 +192,14 @@ fun CameraScreen(navController: NavHostController) {
     @OptIn(ExperimentalPermissionsApi::class)
     val radioPermissionState = rememberMultiplePermissionsState(permissions = radioPermissions)
     var showRadioPermissionDialog by remember { mutableStateOf(false) }
+    var hasRequestedRadioBefore by rememberSaveable { mutableStateOf(false) }
 
     @OptIn(ExperimentalPermissionsApi::class)
     val mediaPermissions = remember { PermissionUtils.getMediaPermissionList() }
     @OptIn(ExperimentalPermissionsApi::class)
     val mediaPermissionState = rememberMultiplePermissionsState(permissions = mediaPermissions)
     var showMediaPermissionDialog by remember { mutableStateOf(false) }
+    var hasRequestedMediaBefore by rememberSaveable { mutableStateOf(false) }
 
     fun toggleRadio() {
         if (isRadioRunning) {
@@ -217,7 +216,6 @@ fun CameraScreen(navController: NavHostController) {
             toggleRadio()
         } else {
             showRadioPermissionDialog = true
-            radioPermissionState.launchMultiplePermissionRequest()
         }
     }
 
@@ -228,7 +226,20 @@ fun CameraScreen(navController: NavHostController) {
             if (vibrateApproved) vibrateOnce(context, 1000)
         } else {
             showMediaPermissionDialog = true
-            mediaPermissionState.launchMultiplePermissionRequest()
+        }
+    }
+
+    LaunchedEffect(radioPermissionState.allPermissionsGranted) {
+        if (showRadioPermissionDialog && radioPermissionState.allPermissionsGranted) {
+            showRadioPermissionDialog = false
+            toggleRadio()
+        }
+    }
+
+    LaunchedEffect(mediaPermissionState.allPermissionsGranted) {
+        if (showMediaPermissionDialog && PermissionUtils.hasMediaPermissions(context)) {
+            showMediaPermissionDialog = false
+            openGalleryWithPermission()
         }
     }
 
@@ -386,7 +397,6 @@ fun CameraScreen(navController: NavHostController) {
                         radioEndpoints = radioEndpoints,
                         beepSoundApproved = beepSoundApproved,
                         vibrateApproved = vibrateApproved,
-                        consolasBold = consolasBold,
                         textShadow = textShadow,
                         navController = navController,
                         lensFacing = lensFacing,
@@ -406,7 +416,6 @@ fun CameraScreen(navController: NavHostController) {
                         radioEndpoints = radioEndpoints,
                         beepSoundApproved = beepSoundApproved,
                         vibrateApproved = vibrateApproved,
-                        consolasBold = consolasBold,
                         textShadow = textShadow,
                         navController = navController,
                         lensFacing = lensFacing,
@@ -427,14 +436,27 @@ fun CameraScreen(navController: NavHostController) {
                 Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                     SelectionContainer {
                         Text(
-                            text =  "●  Tap the record button on toolbar to start/stop recording.\n\n" +
-                                    "●  Record result will be stored in “Bodycam” folder in device media store space.\n\n" +
-                                    "●  Toolbar buttons (Record, Settings, Switch Camera, Video Gallery, Radio) stay fixed on screen.\n\n" +
-                                    "●  If you want to use radio system, push the radio button on all of your devices then wait for connection.\n\n" +
+                            text =  "●  You can use record button or volume key to record (open in settings, you can choose use in app or global control, be aware that you can not adjust volume when you activate this function).\n\n" +
+                                    "●  When is recording, you can close the screen or turn to background, \u201CBodycam\u201D will still recording. \n\n" +
+                                    "●  Record result will be stored in \u201CBodycam\u201D folder in device media store space (you have to authorize media access first).\n\n" +
+                                    "●  There are multiple bodycam brand can choose.\n\n" +
+                                    "●  If you want to use radio system, push the radio button on all of your devices then wait for connection, there will be online devices number on the top of the button when connected (you have to authorize location、nearby connection access first).\n\n" +
                                     "●  You can change the orientation of your device in settings.\n\n" +
-                                    "●  You can manually select the camera lens in settings.\n\n" +
+                                    "●  Not every device have wide lens, lens can be changed in settings, or you can use \"fisheye mode\" instead.\n\n" +
                                     "●  Pinch the screen to zoom in/out the camera.\n\n" +
-                                    "●  User name can be changed.",
+                                    "●  User name can be changed.\n\n" +
+                                    "--------------------------------------------------\n" +
+                                    "[ DISCLAIMER & TERMS OF USE ]\n\n" +
+                                    "1. Lawful Use & Legal Compliance:\n" +
+                                    "This Application is intended solely for lawful safety recording, evidence gathering, and legitimate self-defense purposes. Users are strictly prohibited from using this Application for any unlawful activities (including unauthorized surreptitious recording, wiretapping, stalking, harassment, or extortion). Users assume full legal liability for any violation of applicable laws.\n\n" +
+                                    "2. Privacy & Image Rights:\n" +
+                                    "Users must strictly comply with local privacy regulations and portrait/image rights when recording or broadcasting media. Users assume full responsibility for any disputes caused by sharing or publishing recorded files without consent.\n\n" +
+                                    "3. Data Storage & Loss Disclaimer:\n" +
+                                    "All media files are stored locally on the user's device (Movies/Bodycam directory). No cloud backup is provided. The development team is not liable for file loss or corruption due to device loss, hardware damage, factory resets, or OS updates.\n\n" +
+                                    "4. Hardware & OS Compatibility:\n" +
+                                    "Features like video quality, fisheye effect, continuous flashlight, global volume key, and background recording depend on device hardware and OEM background management. Universal performance on all Android models is not guaranteed.\n\n" +
+                                    "5. Walkie-Talkie Radio Disclaimer:\n" +
+                                    "The radio feature utilizes Android Nearby Connections (Wi-Fi/Bluetooth P2P). Transmission quality and latency depend on environmental interference and distance. Do not rely on it as a primary emergency communication system.",
                             color = White
                         )
                     }
@@ -462,7 +484,7 @@ fun CameraScreen(navController: NavHostController) {
                 },
                 confirmButton = {
                     TextButton(onClick = {
-                        val permanentlyDenied = radioPermissionState.permissions.any {
+                        val permanentlyDenied = hasRequestedRadioBefore && radioPermissionState.permissions.any {
                             !it.status.isGranted && !it.status.shouldShowRationale
                         }
                         if (permanentlyDenied) {
@@ -472,6 +494,7 @@ fun CameraScreen(navController: NavHostController) {
                                 }
                             )
                         } else {
+                            hasRequestedRadioBefore = true
                             radioPermissionState.launchMultiplePermissionRequest()
                         }
                     }) {
@@ -504,7 +527,7 @@ fun CameraScreen(navController: NavHostController) {
                 },
                 confirmButton = {
                     TextButton(onClick = {
-                        val permanentlyDenied = mediaPermissionState.permissions.any {
+                        val permanentlyDenied = hasRequestedMediaBefore && mediaPermissionState.permissions.any {
                             !it.status.isGranted && !it.status.shouldShowRationale
                         }
                         if (permanentlyDenied) {
@@ -514,6 +537,7 @@ fun CameraScreen(navController: NavHostController) {
                                 }
                             )
                         } else {
+                            hasRequestedMediaBefore = true
                             mediaPermissionState.launchMultiplePermissionRequest()
                         }
                     }) {
@@ -537,7 +561,6 @@ private fun HorizontalToolbarButtons(
     radioEndpoints: Set<String>,
     beepSoundApproved: Boolean,
     vibrateApproved: Boolean,
-    consolasBold: FontFamily,
     textShadow: Shadow,
     navController: NavHostController,
     lensFacing: Int,
@@ -628,7 +651,6 @@ private fun HorizontalToolbarButtons(
                 text = "Online: ${radioEndpoints.size + 1}",
                 color = DarkYellow,
                 fontSize = 12.sp,
-                fontFamily = consolasBold,
                 style = MaterialTheme.typography.bodySmall.copy(shadow = textShadow)
             )
         }
@@ -653,7 +675,6 @@ private fun PortraitToolbarButtons(
     radioEndpoints: Set<String>,
     beepSoundApproved: Boolean,
     vibrateApproved: Boolean,
-    consolasBold: FontFamily,
     textShadow: Shadow,
     navController: NavHostController,
     lensFacing: Int,
@@ -670,7 +691,6 @@ private fun PortraitToolbarButtons(
                 text = "Online: ${radioEndpoints.size + 1}",
                 color = DarkYellow,
                 fontSize = 12.sp,
-                fontFamily = consolasBold,
                 style = MaterialTheme.typography.bodySmall.copy(shadow = textShadow)
             )
         }

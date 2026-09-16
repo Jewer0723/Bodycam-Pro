@@ -66,6 +66,39 @@ class WideAngleSurfaceProcessor(
     private val glThread = HandlerThread("GLThread").apply { start() }
     private val handler = Handler(glThread.looper)
 
+    private fun drawOutlinedText(
+        canvas: Canvas,
+        text: String,
+        x: Float,
+        y: Float,
+        fontSize: Float,
+        typeface: Typeface = Typeface.MONOSPACE,
+        align: Paint.Align = Paint.Align.LEFT,
+        fillColor: Int = White.toArgb()
+    ) {
+        val strokePaint = Paint().apply {
+            color = Black.toArgb()
+            textSize = fontSize
+            isAntiAlias = true
+            this.typeface = typeface
+            style = Paint.Style.STROKE
+            strokeWidth = fontSize * 0.12f
+            strokeJoin = Paint.Join.ROUND
+            textAlign = align
+        }
+        val fillPaint = Paint().apply {
+            color = fillColor
+            textSize = fontSize
+            isAntiAlias = true
+            this.typeface = typeface
+            style = Paint.Style.FILL
+            textAlign = align
+        }
+
+        canvas.drawText(text, x, y, strokePaint)
+        canvas.drawText(text, x, y, fillPaint)
+    }
+
     // 安全 Executor：確保即使 HandlerThread 正在處理釋放，CameraX 回調命令也能被執行，避免 Completer 未完成拋出異常
     private val glExecutor = Executor { command ->
         if (glThread.isAlive) {
@@ -392,10 +425,9 @@ class WideAngleSurfaceProcessor(
                 }
 
                 // Axon Text: 上下對齊 (使用統一的 X 座標)
-                textPaint.textAlign = Paint.Align.LEFT
                 val axonTextX = logoLeft - 650f
-                canvas.drawText("$userName $nowStr", axonTextX, padY + textFontSize * 2.3f, textPaint)
-                canvas.drawText(phoneName, axonTextX, padY + textFontSize * 3.5f, textPaint)
+                drawOutlinedText(canvas, "$userName $nowStr", axonTextX, padY + textFontSize * 2.3f, textFontSize)
+                drawOutlinedText(canvas, phoneName, axonTextX, padY + textFontSize * 3.5f, textFontSize)
 
                 // 待機/錄影中 Icon: 稍微向左一點
                 if (showRecIcon) {
@@ -468,11 +500,9 @@ class WideAngleSurfaceProcessor(
                 }
 
                 // 字體往上和 icon 切齊且往左靠近 icon 一點
-                textPaint.textAlign = Paint.Align.LEFT
-                textPaint.color = DarkOrange.toArgb()
                 val textLeft = logoLeft + iconSize - 20f
-                canvas.drawText(userName, textLeft, logoTop + textFontSize * 2f, textPaint)
-                canvas.drawText("$nowStr $phoneName", textLeft, logoTop + textFontSize * 3.5f, textPaint)
+                drawOutlinedText(canvas, userName, textLeft, logoTop + textFontSize * 2f, textFontSize, fillColor = DarkOrange.toArgb())
+                drawOutlinedText(canvas, "$nowStr $phoneName", textLeft, logoTop + textFontSize * 3.5f, textFontSize, fillColor = DarkOrange.toArgb())
 
                 // 待機/錄影中 Icon: 稍微向左一點
                 if (showRecIcon) {
@@ -524,8 +554,7 @@ class WideAngleSurfaceProcessor(
 
                 // 字體往上一點
                 val textY = height - padY - 40f
-                textPaint.textAlign = Paint.Align.CENTER
-                canvas.drawText("DZ $userName $phoneName *$nowStr", width / 2f, textY, textPaint)
+                drawOutlinedText(canvas, "DZ $userName $phoneName *$nowStr", width / 2f, textY, textFontSize, align = Paint.Align.CENTER)
 
                 // 待機/錄影中 Icon: 稍微向左一點
                 if (showRecIcon) {
@@ -537,9 +566,8 @@ class WideAngleSurfaceProcessor(
             }
             "PANASONIC" -> {
                 // 字體往左靠一點
-                textPaint.textAlign = Paint.Align.LEFT
-                canvas.drawText(nowStr, padX - 50f, padY + textFontSize * 1.8f, textPaint)
-                canvas.drawText("$userName $phoneName", padX - 50f, padY + textFontSize * 2.8f, textPaint)
+                drawOutlinedText(canvas, nowStr, padX - 50f, padY + textFontSize * 1.8f, textFontSize)
+                drawOutlinedText(canvas, "$userName $phoneName", padX - 50f, padY + textFontSize * 2.8f, textFontSize)
 
                 // Panasonic Icon: 放大一點且靠右一點
                 val logoDrawable = ContextCompat.getDrawable(context, R.mipmap.ic_panasonic1_icon_foreground)?.apply { setTint(LightGreen.toArgb()) }
@@ -621,10 +649,9 @@ class WideAngleSurfaceProcessor(
                     it.draw(canvas)
                 }
 
-                textPaint.textAlign = Paint.Align.LEFT
                 val axonTextX = logoLeft - 650f
-                canvas.drawText("$userName $nowStr", axonTextX, padY + textFontSize * 4.4f, textPaint)
-                canvas.drawText(phoneName, axonTextX, padY + textFontSize * 5.6f, textPaint)
+                drawOutlinedText(canvas, "$userName $nowStr", axonTextX, padY + textFontSize * 4.4f, textFontSize)
+                drawOutlinedText(canvas, phoneName, axonTextX, padY + textFontSize * 5.6f, textFontSize)
 
                 // 待機/錄影中 Icon: 稍微向左一點
                 if (showRecIcon) {
@@ -697,11 +724,9 @@ class WideAngleSurfaceProcessor(
                 }
 
                 // 字體往上和 icon 切齊且往左靠近 icon 一點
-                textPaint.textAlign = Paint.Align.LEFT
-                textPaint.color = DarkOrange.toArgb()
                 val textLeft = logoLeft + iconSize - 20f
-                canvas.drawText(userName, textLeft, logoTop + textFontSize * 2f, textPaint)
-                canvas.drawText("$nowStr $phoneName", textLeft, logoTop + textFontSize * 3.5f, textPaint)
+                drawOutlinedText(canvas, userName, textLeft, logoTop + textFontSize * 2f, textFontSize, fillColor = DarkOrange.toArgb())
+                drawOutlinedText(canvas, "$nowStr $phoneName", textLeft, logoTop + textFontSize * 3.5f, textFontSize, fillColor = DarkOrange.toArgb())
 
                 // 待機/錄影中 Icon: 稍微向左一點
                 if (showRecIcon) {
@@ -753,8 +778,7 @@ class WideAngleSurfaceProcessor(
 
                 // 字體往上一點
                 val textY = height - padY - 140f
-                textPaint.textAlign = Paint.Align.CENTER
-                canvas.drawText("DZ $userName $phoneName *$nowStr", width / 2f, textY, textPaint)
+                drawOutlinedText(canvas, "DZ $userName $phoneName *$nowStr", width / 2f, textY, textFontSize, align = Paint.Align.CENTER)
 
                 // 待機/錄影中 Icon: 稍微向左一點
                 if (showRecIcon) {
@@ -766,9 +790,8 @@ class WideAngleSurfaceProcessor(
             }
             "PANASONIC" -> {
                 // 字體往左靠一點
-                textPaint.textAlign = Paint.Align.LEFT
-                canvas.drawText(nowStr, padX - 50f, padY + textFontSize * 4.3f, textPaint)
-                canvas.drawText("$userName $phoneName", padX - 50f, padY + textFontSize * 5.5f, textPaint)
+                drawOutlinedText(canvas, nowStr, padX - 50f, padY + textFontSize * 4.3f, textFontSize)
+                drawOutlinedText(canvas, "$userName $phoneName", padX - 50f, padY + textFontSize * 5.5f, textFontSize)
 
                 // Panasonic Icon: 放大一點且靠右一點
                 val logoDrawable = ContextCompat.getDrawable(context, R.mipmap.ic_panasonic1_icon_foreground)?.apply { setTint(LightGreen.toArgb()) }
@@ -869,10 +892,9 @@ class WideAngleSurfaceProcessor(
                         it.draw(this)
                     }
 
-                    textPaint.textAlign = Paint.Align.LEFT
                     val axonTextX = logoLeft - 600f
-                    drawText("$userName $nowStr", axonTextX, padY + textFontSize * 0.25f, textPaint)
-                    drawText(phoneName, axonTextX, padY + textFontSize * 1.4f, textPaint)
+                    drawOutlinedText(canvas, "$userName $nowStr", axonTextX, padY + textFontSize * 0.25f, textFontSize)
+                    drawOutlinedText(canvas, phoneName, axonTextX, padY + textFontSize * 1.4f, textFontSize)
 
                     if (showRecIcon) {
                         recDrawable?.let {
@@ -958,16 +980,9 @@ class WideAngleSurfaceProcessor(
                         it.draw(this)
                     }
 
-                    textPaint.textAlign = Paint.Align.LEFT
-                    textPaint.color = DarkOrange.toArgb()
                     val textLeft = logoLeft + iconSize - 20f
-                    drawText("$userName $phoneName", textLeft, logoTop + textFontSize * 2f, textPaint)
-                    drawText(
-                        nowStr,
-                        textLeft,
-                        logoTop + textFontSize * 3.5f,
-                        textPaint
-                    )
+                    drawOutlinedText(this, "$userName $phoneName", textLeft, logoTop + textFontSize * 2f, textFontSize, fillColor = DarkOrange.toArgb())
+                    drawOutlinedText(this, nowStr, textLeft, logoTop + textFontSize * 3.5f, textFontSize, fillColor = DarkOrange.toArgb())
 
                     if (showRecIcon) {
                         recDrawable?.let {
@@ -1038,8 +1053,7 @@ class WideAngleSurfaceProcessor(
                     }
 
                     val textY = vHeight - padY + 30f
-                    textPaint.textAlign = Paint.Align.CENTER
-                    drawText("DZ $userName *$nowStr", vWidth / 2f, textY, textPaint)
+                    drawOutlinedText(this, "DZ $userName *$nowStr", vWidth / 2f, textY, textFontSize, align = Paint.Align.CENTER)
 
                     if (showRecIcon) {
                         recDrawable?.let {
@@ -1055,14 +1069,8 @@ class WideAngleSurfaceProcessor(
                 }
 
                 "PANASONIC" -> {
-                    textPaint.textAlign = Paint.Align.LEFT
-                    drawText(nowStr, padX + 40f, padY + textFontSize * -0.5f, textPaint)
-                    drawText(
-                        "$userName $phoneName",
-                        padX + 40f,
-                        padY + textFontSize * 0.8f,
-                        textPaint
-                    )
+                    drawOutlinedText(this, nowStr, padX + 40f, padY + textFontSize * -0.5f, textFontSize)
+                    drawOutlinedText(this, "$userName $phoneName", padX + 40f, padY + textFontSize * 0.8f, textFontSize)
 
                     val logoDrawable =
                         ContextCompat.getDrawable(context, R.mipmap.ic_panasonic1_icon_foreground)
@@ -1173,10 +1181,9 @@ class WideAngleSurfaceProcessor(
                         it.draw(this)
                     }
 
-                    textPaint.textAlign = Paint.Align.LEFT
                     val axonTextX = logoLeft - 550f
-                    drawText("$userName $nowStr", axonTextX, padY + textFontSize * -0.3f, textPaint)
-                    drawText(phoneName, axonTextX, padY + textFontSize * 0.9f, textPaint)
+                    drawOutlinedText(canvas, "$userName $nowStr", axonTextX, padY + textFontSize * -0.3f, textFontSize)
+                    drawOutlinedText(canvas, phoneName, axonTextX, padY + textFontSize * 0.9f, textFontSize)
 
                     if (showRecIcon) {
                         recDrawable?.let {
@@ -1262,15 +1269,15 @@ class WideAngleSurfaceProcessor(
                         it.draw(this)
                     }
 
-                    textPaint.textAlign = Paint.Align.LEFT
-                    textPaint.color = DarkOrange.toArgb()
                     val textLeft = logoLeft + iconSize - 20f
-                    drawText("$userName $phoneName", textLeft, logoTop + textFontSize * 2f, textPaint)
-                    drawText(
+                    drawOutlinedText(this, "$userName $phoneName", textLeft, logoTop + textFontSize * 2f, textFontSize, fillColor = DarkOrange.toArgb())
+                    drawOutlinedText(
+                        this,
                         nowStr,
                         textLeft,
                         logoTop + textFontSize * 3.5f,
-                        textPaint
+                        textFontSize,
+                        fillColor = DarkOrange.toArgb()
                     )
 
                     if (showRecIcon) {
@@ -1342,8 +1349,7 @@ class WideAngleSurfaceProcessor(
                     }
 
                     val textY = vHeight - padY + 50f
-                    textPaint.textAlign = Paint.Align.CENTER
-                    drawText("DZ $userName *$nowStr", vWidth / 2f, textY, textPaint)
+                    drawOutlinedText(this, "DZ $userName *$nowStr", vWidth / 2f, textY, textFontSize, align = Paint.Align.CENTER)
 
                     if (showRecIcon) {
                         recDrawable?.let {
@@ -1359,13 +1365,13 @@ class WideAngleSurfaceProcessor(
                 }
 
                 "PANASONIC" -> {
-                    textPaint.textAlign = Paint.Align.LEFT
-                    drawText(nowStr, padX + 140f, padY + textFontSize * -0.5f, textPaint)
-                    drawText(
+                    drawOutlinedText(this, nowStr, padX + 140f, padY + textFontSize * -0.5f, textFontSize)
+                    drawOutlinedText(
+                        this,
                         "$userName $phoneName",
                         padX + 140f,
                         padY + textFontSize * 0.8f,
-                        textPaint
+                        textFontSize
                     )
 
                     val logoDrawable =

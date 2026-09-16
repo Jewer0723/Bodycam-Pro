@@ -271,15 +271,7 @@ class RecordService: Service(), LifecycleOwner {
         )
 
         val notifyTitle = "Recording..."
-        val notifyText = when(getBodycamBrand(this)) {
-            "AXON" -> "Tap top right “AXON” icon or notification button to stop"
-            "MOTOROLA" -> "Tap top left “MOTOROLA” icon or notification button to stop"
-            "TRANSCEND" -> "Tap bottom left “TRANSCEND” icon or notification button to stop"
-            "GETAC" -> "Tap top left “GETAC” icon or notification button to stop"
-            "DOZOR" -> "Tap top right “DOZOR” icon or notification button to stop"
-            "PANASONIC" -> "Tap top right “PANASONIC” icon or notification button to stop"
-            else -> "Tap button to stop recording"
-        }
+        val notifyText = "Tap button to stop recording"
 
         val stopAction = NotificationCompat.Action.Builder(
             R.drawable.ic_stop_record_foreground,

@@ -238,9 +238,18 @@ class WideAngleSurfaceProcessor(
             initGL()
 
             // 1. 安全釋放舊的 SurfaceTexture 與 Texture ID，防止前後鏡頭切換時 updateTexImage 發生 Native SIGSEGV 崩潰
-            surfaceTexture?.setOnFrameAvailableListener(null)
-            surfaceTexture?.release()
+            surfaceTexture?.let { oldST ->
+                try {
+                    oldST.setOnFrameAvailableListener(null)
+                    if (!oldST.isReleased) {
+                        oldST.release()
+                    }
+                } catch (e: Throwable) {
+                    Log.e("WideAngle", "Error releasing old SurfaceTexture", e)
+                }
+            }
             surfaceTexture = null
+
             if (cameraTexName != -1) {
                 GLES20.glDeleteTextures(1, intArrayOf(cameraTexName), 0)
                 cameraTexName = -1
@@ -258,24 +267,39 @@ class WideAngleSurfaceProcessor(
 
             val surface = Surface(newSurfaceTexture)
             surfaceRequest.provideSurface(surface, glExecutor) {
-                surface.release()
-                newSurfaceTexture.release()
+                handler.post {
+                    try {
+                        if (surfaceTexture == newSurfaceTexture) {
+                            surfaceTexture = null
+                        }
+                        newSurfaceTexture.setOnFrameAvailableListener(null)
+                        surface.release()
+                        if (!newSurfaceTexture.isReleased) {
+                            newSurfaceTexture.release()
+                        }
+                    } catch (e: Throwable) {
+                        Log.e("WideAngle", "Error releasing SurfaceTexture in cleanup", e)
+                    }
+                }
             }
 
             newSurfaceTexture.setOnFrameAvailableListener {
                 if (!glThread.isAlive || surfaceTexture != newSurfaceTexture) return@setOnFrameAvailableListener
                 handler.post {
-                    if (eglDisplay == EGL14.EGL_NO_DISPLAY || surfaceTexture != newSurfaceTexture) return@post
+                    if (eglDisplay == EGL14.EGL_NO_DISPLAY || eglContext == EGL14.EGL_NO_CONTEXT || surfaceTexture != newSurfaceTexture) return@post
+                    if (newSurfaceTexture.isReleased) return@post
 
                     // 確保在調用 updateTexImage 前當前執行緒具備有效的 EGLDisplay、EGLSurface 與 EGLContext，防止 invalid current EGLDisplay 崩潰
-                    if (pbufferSurface != EGL14.EGL_NO_SURFACE) {
-                        EGL14.eglMakeCurrent(eglDisplay, pbufferSurface, pbufferSurface, eglContext)
+                    if (pbufferSurface == EGL14.EGL_NO_SURFACE) return@post
+                    if (!EGL14.eglMakeCurrent(eglDisplay, pbufferSurface, pbufferSurface, eglContext)) {
+                        Log.w("WideAngle", "EGLMakeCurrent failed before updateTexImage")
+                        return@post
                     }
 
                     try {
                         newSurfaceTexture.updateTexImage()
-                    } catch (e: Exception) {
-                        Log.e("WideAngle", "updateTexImage failed", e)
+                    } catch (e: Throwable) {
+                        Log.e("WideAngle", "updateTexImage failed safely", e)
                         return@post
                     }
 

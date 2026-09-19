@@ -346,7 +346,11 @@ class WideAngleSurfaceProcessor(
             val windowSurface = EGL14.eglCreateWindowSurface(
                 eglDisplay, eglConfig, surface, intArrayOf(EGL14.EGL_NONE), 0
             )
-            outputSurfaces[surfaceOutput] = windowSurface
+            if (windowSurface != EGL14.EGL_NO_SURFACE) {
+                outputSurfaces[surfaceOutput] = windowSurface
+            } else {
+                Log.e("WideAngle", "EGLCreateWindowSurface failed with error 0x${Integer.toHexString(EGL14.eglGetError())}")
+            }
         }
     }
 
@@ -439,19 +443,39 @@ class WideAngleSurfaceProcessor(
 
         when (brand) {
             "AXON" -> {
-                // Axon Logo: 向右移動一點
                 val logoDrawable = ContextCompat.getDrawable(context, R.mipmap.ic_water_mark_foreground)?.apply { setTint(DarkYellow.toArgb()) }
                 val logoRight = width - padX + 80f
                 val logoLeft = logoRight - iconSize
+                val logoBottom = padY + iconSize
                 logoDrawable?.let {
-                    it.setBounds(logoLeft.toInt(), padY.toInt(), logoRight.toInt(), (padY + iconSize).toInt())
+                    it.setBounds(logoLeft.toInt(),
+                        padY.toInt(), logoRight.toInt(), logoBottom.toInt())
                     it.draw(canvas)
                 }
 
-                // Axon Text: 上下對齊 (使用統一的 X 座標)
-                val axonTextX = logoLeft - 650f
-                drawOutlinedText(canvas, "$userName $nowStr", axonTextX, padY + textFontSize * 2.3f, textFontSize)
-                drawOutlinedText(canvas, phoneName, axonTextX, padY + textFontSize * 3.5f, textFontSize)
+                // Axon Text: 兩排貼近、左對齊、中線對齊 Icon、與 Icon 保持 -30f 間隔不遮擋
+                val line1Text = "$userName $nowStr"
+
+                val axonFontSize = textFontSize * 0.85f
+                val lineSpacing = axonFontSize * 1.05f
+                val iconCenterY = padY + iconSize / 2f
+                val line1Y = iconCenterY - lineSpacing / 2f + axonFontSize * 0.25f
+                val line2Y = line1Y + lineSpacing
+
+                val spacing = -50f
+                val measurePaint = Paint().apply {
+                    textSize = axonFontSize
+                    typeface = Typeface.MONOSPACE
+                }
+                val maxTextWidth = maxOf(measurePaint.measureText(line1Text), measurePaint.measureText(
+                    phoneName
+                ))
+                val axonTextRight = logoLeft - spacing
+                val axonTextLeft = axonTextRight - maxTextWidth
+
+                drawOutlinedText(canvas, line1Text, axonTextLeft, line1Y, axonFontSize, align = Paint.Align.LEFT)
+                drawOutlinedText(canvas,
+                    phoneName, axonTextLeft, line2Y, axonFontSize, align = Paint.Align.LEFT)
 
                 // 待機/錄影中 Icon: 稍微向左一點
                 if (showRecIcon) {
@@ -664,18 +688,39 @@ class WideAngleSurfaceProcessor(
 
         when (brand) {
             "AXON" -> {
-                // Axon Logo: 向右移動一點
                 val logoDrawable = ContextCompat.getDrawable(context, R.mipmap.ic_water_mark_foreground)?.apply { setTint(DarkYellow.toArgb()) }
                 val logoRight = width - padX + 100f
                 val logoLeft = logoRight - iconSize
+                val logoTop = padY + 100f
+                val logoBottom = logoTop + iconSize
                 logoDrawable?.let {
-                    it.setBounds(logoLeft.toInt(), (padY + 100f).toInt(), logoRight.toInt(), (padY + iconSize + 100f).toInt())
+                    it.setBounds(logoLeft.toInt(), logoTop.toInt(), logoRight.toInt(), logoBottom.toInt())
                     it.draw(canvas)
                 }
 
-                val axonTextX = logoLeft - 650f
-                drawOutlinedText(canvas, "$userName $nowStr", axonTextX, padY + textFontSize * 4.4f, textFontSize)
-                drawOutlinedText(canvas, phoneName, axonTextX, padY + textFontSize * 5.6f, textFontSize)
+                // Axon Text: 兩排貼近、左對齊、中線對齊 Icon、與 Icon 保持 -30f 間隔不遮擋
+                val line1Text = "$userName $nowStr"
+
+                val axonFontSize = textFontSize * 0.85f
+                val lineSpacing = axonFontSize * 1.05f
+                val iconCenterY = logoTop + iconSize / 2f
+                val line1Y = iconCenterY - lineSpacing / 2f + axonFontSize * 0.25f
+                val line2Y = line1Y + lineSpacing
+
+                val spacing = -50f
+                val measurePaint = Paint().apply {
+                    textSize = axonFontSize
+                    typeface = Typeface.MONOSPACE
+                }
+                val maxTextWidth = maxOf(measurePaint.measureText(line1Text), measurePaint.measureText(
+                    phoneName
+                ))
+                val axonTextRight = logoLeft - spacing
+                val axonTextLeft = axonTextRight - maxTextWidth
+
+                drawOutlinedText(canvas, line1Text, axonTextLeft, line1Y, axonFontSize, align = Paint.Align.LEFT)
+                drawOutlinedText(canvas,
+                    phoneName, axonTextLeft, line2Y, axonFontSize, align = Paint.Align.LEFT)
 
                 // 待機/錄影中 Icon: 稍微向左一點
                 if (showRecIcon) {
@@ -906,19 +951,41 @@ class WideAngleSurfaceProcessor(
                             ?.apply { setTint(DarkYellow.toArgb()) }
                     val logoRight = vWidth - padX + 5f
                     val logoLeft = logoRight - iconSize
+                    val logoTop = padY - 100f
+                    val logoBottom = logoTop + iconSize
                     logoDrawable?.let {
                         it.setBounds(
                             logoLeft.toInt(),
-                            (padY - 100f).toInt(),
+                            logoTop.toInt(),
                             logoRight.toInt(),
-                            (padY + iconSize - 100f).toInt()
+                            logoBottom.toInt()
                         )
                         it.draw(this)
                     }
 
-                    val axonTextX = logoLeft - 600f
-                    drawOutlinedText(canvas, "$userName $nowStr", axonTextX, padY + textFontSize * 0.25f, textFontSize)
-                    drawOutlinedText(canvas, phoneName, axonTextX, padY + textFontSize * 1.4f, textFontSize)
+                    // Axon Text: 兩排貼近、左對齊、中線對齊 Icon、與 Icon 保持 -30f 間隔不遮擋
+                    val line1Text = "$userName $nowStr"
+
+                    val axonFontSize = textFontSize * 0.85f
+                    val lineSpacing = axonFontSize * 1.05f
+                    val iconCenterY = logoTop + iconSize / 2f
+                    val line1Y = iconCenterY - lineSpacing / 2f + axonFontSize * 0.25f
+                    val line2Y = line1Y + lineSpacing
+
+                    val spacing = -50f
+                    val measurePaint = Paint().apply {
+                        textSize = axonFontSize
+                        typeface = Typeface.MONOSPACE
+                    }
+                    val maxTextWidth = maxOf(measurePaint.measureText(line1Text), measurePaint.measureText(
+                        phoneName
+                    ))
+                    val axonTextRight = logoLeft - spacing
+                    val axonTextLeft = axonTextRight - maxTextWidth
+
+                    drawOutlinedText(canvas, line1Text, axonTextLeft, line1Y, axonFontSize, align = Paint.Align.LEFT)
+                    drawOutlinedText(canvas,
+                        phoneName, axonTextLeft, line2Y, axonFontSize, align = Paint.Align.LEFT)
 
                     if (showRecIcon) {
                         recDrawable?.let {
@@ -1195,19 +1262,41 @@ class WideAngleSurfaceProcessor(
                             ?.apply { setTint(DarkYellow.toArgb()) }
                     val logoRight = vWidth - padX - 80f
                     val logoLeft = logoRight - iconSize
+                    val logoTop = padY - 110f
+                    val logoBottom = logoTop + iconSize
                     logoDrawable?.let {
                         it.setBounds(
                             logoLeft.toInt(),
-                            (padY - 110f).toInt(),
+                            logoTop.toInt(),
                             logoRight.toInt(),
-                            (padY + iconSize - 110f).toInt()
+                            logoBottom.toInt()
                         )
                         it.draw(this)
                     }
 
-                    val axonTextX = logoLeft - 550f
-                    drawOutlinedText(canvas, "$userName $nowStr", axonTextX, padY + textFontSize * -0.3f, textFontSize)
-                    drawOutlinedText(canvas, phoneName, axonTextX, padY + textFontSize * 0.9f, textFontSize)
+                    // Axon Text: 兩排貼近、左對齊、中線對齊 Icon、與 Icon 保持 -30f 間隔不遮擋
+                    val line1Text = "$userName $nowStr"
+
+                    val axonFontSize = textFontSize * 0.85f
+                    val lineSpacing = axonFontSize * 1.05f
+                    val iconCenterY = logoTop + iconSize / 2f
+                    val line1Y = iconCenterY - lineSpacing / 2f + axonFontSize * 0.25f
+                    val line2Y = line1Y + lineSpacing
+
+                    val spacing = -50f
+                    val measurePaint = Paint().apply {
+                        textSize = axonFontSize
+                        typeface = Typeface.MONOSPACE
+                    }
+                    val maxTextWidth = maxOf(measurePaint.measureText(line1Text), measurePaint.measureText(
+                        phoneName
+                    ))
+                    val axonTextRight = logoLeft - spacing
+                    val axonTextLeft = axonTextRight - maxTextWidth
+
+                    drawOutlinedText(canvas, line1Text, axonTextLeft, line1Y, axonFontSize, align = Paint.Align.LEFT)
+                    drawOutlinedText(canvas,
+                        phoneName, axonTextLeft, line2Y, axonFontSize, align = Paint.Align.LEFT)
 
                     if (showRecIcon) {
                         recDrawable?.let {
@@ -1438,7 +1527,11 @@ class WideAngleSurfaceProcessor(
         EGL14.eglInitialize(eglDisplay, version, 0, version, 1)
         val configAttribs = intArrayOf(
             EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
-            EGL14.EGL_RED_SIZE, 8, EGL14.EGL_GREEN_SIZE, 8, EGL14.EGL_BLUE_SIZE, 8, EGL14.EGL_ALPHA_SIZE, 8,
+            EGL14.EGL_RED_SIZE, 8,
+            EGL14.EGL_GREEN_SIZE, 8,
+            EGL14.EGL_BLUE_SIZE, 8,
+            EGL14.EGL_ALPHA_SIZE, 8,
+            EGL14.EGL_SURFACE_TYPE, EGL14.EGL_WINDOW_BIT or EGL14.EGL_PBUFFER_BIT,
             EGL14.EGL_NONE
         )
         val configs = arrayOfNulls<EGLConfig>(1)

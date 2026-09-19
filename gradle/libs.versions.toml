@@ -1,6 +1,6 @@
 [versions]
 accompanistPermissionsVersion = "0.37.3"
-agp = "9.4.0"
+agp = "9.4.1"
 cameraVideoVersion = "1.6.2"
 desugar_jdk_libsVersion = "2.1.5"
 guavaVersion = "33.7.1-android"

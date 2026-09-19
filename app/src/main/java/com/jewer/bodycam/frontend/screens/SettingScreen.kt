@@ -60,6 +60,7 @@ import com.jewer.bodycam.backend.functions.getCameraFps
 import com.jewer.bodycam.backend.functions.getFisheyeK
 import com.jewer.bodycam.backend.functions.getFisheyeScale
 import com.jewer.bodycam.backend.functions.getFlashlightStatus
+import com.jewer.bodycam.backend.functions.getFullScreenPreviewStatus
 import com.jewer.bodycam.backend.functions.getKeyRecordingStatus
 import com.jewer.bodycam.backend.functions.getLowBrightnessStatus
 import com.jewer.bodycam.backend.functions.getOrientationMode
@@ -78,6 +79,7 @@ import com.jewer.bodycam.backend.functions.updateCameraFps
 import com.jewer.bodycam.backend.functions.updateFisheyeK
 import com.jewer.bodycam.backend.functions.updateFisheyeScale
 import com.jewer.bodycam.backend.functions.updateFlashlightStatus
+import com.jewer.bodycam.backend.functions.updateFullScreenPreviewStatus
 import com.jewer.bodycam.backend.functions.updateKeyRecordingStatus
 import com.jewer.bodycam.backend.functions.updateLowBrightnessStatus
 import com.jewer.bodycam.backend.functions.updateOrientationMode
@@ -121,6 +123,7 @@ fun SettingScreen(
     var beepVolume by remember { mutableIntStateOf(getBeepVolume(context)) }
     val isLowBrightnessChecked = remember { mutableStateOf(getLowBrightnessStatus(context)) }
     val isFlashlightChecked = remember { mutableStateOf(getFlashlightStatus(context)) }
+    val isFullScreenPreviewChecked = remember { mutableStateOf(getFullScreenPreviewStatus(context)) }
     val isKeyRecordingChecked = remember { mutableStateOf(getKeyRecordingStatus(context)) }
     val isSimulatedWideAngleChecked = remember { mutableStateOf(getSimulatedWideAngleStatus(context)) }
     var fisheyeK by remember { mutableFloatStateOf(getFisheyeK(context)) }
@@ -140,21 +143,27 @@ fun SettingScreen(
         val frontCameras = mutableListOf<CameraOption>()
 
         try {
-            cameraManager.cameraIdList.forEach { logicalId ->
-                val chars = cameraManager.getCameraCharacteristics(logicalId)
-                val facing = chars.get(CameraCharacteristics.LENS_FACING)
-                
-                // 1. 先加入邏輯鏡頭本身
-                addCameraOption(cameraManager, logicalId, facing, backCameras, frontCameras)
+            val allLogicalIds = cameraManager.cameraIdList.toList()
+
+            // 1. 遍歷所有 Camera2 API 回傳的鏡頭 ID (包含 0, 1, 2, 3, 4 等)
+            allLogicalIds.forEach { logicalId ->
+                val chars = try { cameraManager.getCameraCharacteristics(logicalId) } catch (_: Exception) { null }
+                val facing = chars?.get(CameraCharacteristics.LENS_FACING)
+
+                // 加入鏡頭本身
+                addCameraOption(cameraManager, logicalId, facing, backCameras, frontCameras, isPhysical = false)
 
                 // 2. 深度挖掘：獲取該邏輯鏡頭包含的所有物理鏡頭 (API 28+)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    val physicalIds = chars.physicalCameraIds
-                    physicalIds.forEach { physicalId ->
-                        // 避免重複加入
-                        if (physicalId != logicalId) {
-                            addCameraOption(cameraManager, physicalId, facing, backCameras, frontCameras, isPhysical = true)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && chars != null) {
+                    try {
+                        val physicalIds = chars.physicalCameraIds
+                        physicalIds.forEach { physicalId ->
+                            val physChars = try { cameraManager.getCameraCharacteristics(physicalId) } catch (_: Exception) { null }
+                            val physFacing = physChars?.get(CameraCharacteristics.LENS_FACING) ?: facing
+                            addCameraOption(cameraManager, physicalId, physFacing, backCameras, frontCameras, isPhysical = true)
                         }
+                    } catch (e: Exception) {
+                        Log.e("Settings", "Error inspecting physical IDs for $logicalId", e)
                     }
                 }
             }
@@ -349,6 +358,23 @@ fun SettingScreen(
                             isFlashlightChecked.value = it
                             updateFlashlightStatus(context, it)
                             if (isFlashlightChecked.value) playFeedback()
+                        },
+                            colors = SwitchDefaults.colors(checkedThumbColor = White, uncheckedThumbColor = White, checkedTrackColor = DarkYellow, uncheckedTrackColor = Gray))
+                    }
+                }
+
+                // 全螢幕相機預覽
+                TextButton(onClick = {
+                    isFullScreenPreviewChecked.value = !isFullScreenPreviewChecked.value
+                    updateFullScreenPreviewStatus(context, isFullScreenPreviewChecked.value)
+                    if (isFullScreenPreviewChecked.value) playFeedback()
+                }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "Full Screen Camera Preview", textAlign = TextAlign.Start, modifier = Modifier.weight(1f), color = White)
+                        Switch(checked = isFullScreenPreviewChecked.value, onCheckedChange = {
+                            isFullScreenPreviewChecked.value = it
+                            updateFullScreenPreviewStatus(context, it)
+                            if (isFullScreenPreviewChecked.value) playFeedback()
                         },
                             colors = SwitchDefaults.colors(checkedThumbColor = White, uncheckedThumbColor = White, checkedTrackColor = DarkYellow, uncheckedTrackColor = Gray))
                     }
@@ -636,19 +662,28 @@ private fun addCameraOption(
     isPhysical: Boolean = false
 ) {
     try {
-        val chars = manager.getCameraCharacteristics(id)
-        val focalLengths = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+        val chars = try { manager.getCameraCharacteristics(id) } catch (_: Exception) { null }
+        val effectiveFacing = chars?.get(CameraCharacteristics.LENS_FACING)
+            ?: facing
+            ?: if (id == "1") CameraCharacteristics.LENS_FACING_FRONT else CameraCharacteristics.LENS_FACING_BACK
+
+        val focalLengths = chars?.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
         val focalLength = focalLengths?.firstOrNull() ?: 0f
-        val apertures = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)
+        val apertures = chars?.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)
         val aperture = apertures?.firstOrNull() ?: 0f
-        
+
         val typeTag = if (isPhysical) "Phys" else "Log"
-        val infoText = String.format(Locale.US, "[%s] %.0fmm f/%.1f (ID:%s)", typeTag, focalLength, aperture, id)
+        val infoText = if (focalLength > 0f) {
+            String.format(Locale.US, "[%s] %.1fmm f/%.1f (ID:%s)", typeTag, focalLength, aperture, id)
+        } else {
+            String.format(Locale.US, "[%s] Camera (ID:%s)", typeTag, id)
+        }
 
         val option = CameraOption(id, infoText)
-        when (facing) {
-            CameraCharacteristics.LENS_FACING_BACK -> if (backList.none { it.id == id }) backList.add(option)
-            CameraCharacteristics.LENS_FACING_FRONT -> if (frontList.none { it.id == id }) frontList.add(option)
+        if (effectiveFacing == CameraCharacteristics.LENS_FACING_FRONT) {
+            if (frontList.none { it.id == id }) frontList.add(option)
+        } else {
+            if (backList.none { it.id == id }) backList.add(option)
         }
     } catch (e: Exception) {
         Log.e("Settings", "Error parsing camera $id", e)

@@ -178,6 +178,24 @@ fun getFlashlightStatus(context: Context): Boolean {
 
 /**********************************************************************************************************/
 
+// 更新全螢幕相機預覽布林狀態
+fun updateFullScreenPreviewStatus(context: Context, isEnabled: Boolean) {
+    val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    sharedPreferences.edit {
+        putBoolean("fullScreenPreview", isEnabled)
+    }
+}
+
+// 讀取全螢幕相機預覽布林狀態 (預設 false: FIT_CENTER 原比例, true: FILL_CENTER 全螢幕)
+fun getFullScreenPreviewStatus(context: Context): Boolean {
+    val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    return sharedPreferences.getBoolean("fullScreenPreview", false)
+}
+
+/******************************************************************************************************************/
+
+/**********************************************************************************************************/
+
 // 更新按鍵錄影布林狀態
 fun updateKeyRecordingStatus(context: Context, isEnabled: Boolean) {
     val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
@@ -300,7 +318,7 @@ fun updateFisheyeK(context: Context, k: Float) {
 // 讀取魚眼 K 值 (預設 0.45)
 fun getFisheyeK(context: Context): Float {
     val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-    return sharedPreferences.getFloat("fisheyeK", 0.45f)
+    return sharedPreferences.getFloat("fisheyeK", 0.23f)
 }
 
 // 更新魚眼縮放值 (原 distortedPos 係數)
@@ -314,7 +332,7 @@ fun updateFisheyeScale(context: Context, scale: Float) {
 // 讀取魚眼縮放值 (預設 0.6)
 fun getFisheyeScale(context: Context): Float {
     val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-    return sharedPreferences.getFloat("fisheyeScale", 0.6f)
+    return sharedPreferences.getFloat("fisheyeScale", 0.67f)
 }
 
 /******************************************************************************************************************/

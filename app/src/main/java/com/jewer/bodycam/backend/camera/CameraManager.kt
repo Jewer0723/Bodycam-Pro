@@ -95,15 +95,15 @@ object CameraManager {
         val currentCap = videoCapture
         if (currentCap == null || currentQuality != selectedQuality) {
             currentQuality = selectedQuality
-            val targetQuality = when (selectedQuality) {
-                "FHD" -> Quality.FHD
-                "HD" -> Quality.HD
-                else -> Quality.SD
+            val qualityList = when (selectedQuality) {
+                "FHD" -> listOf(Quality.FHD, Quality.HD, Quality.SD, Quality.LOWEST)
+                "HD" -> listOf(Quality.HD, Quality.SD, Quality.LOWEST)
+                else -> listOf(Quality.SD, Quality.LOWEST, Quality.HIGHEST)
             }
             val newRecorder = Recorder.Builder()
                 .setQualitySelector(
-                    QualitySelector.from(
-                        targetQuality,
+                    QualitySelector.fromOrderedList(
+                        qualityList,
                         FallbackStrategy.lowerQualityOrHigherThan(Quality.SD)
                     )
                 )

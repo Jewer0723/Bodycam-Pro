@@ -69,6 +69,7 @@ import com.jewer.bodycam.backend.functions.getCameraFps
 import com.jewer.bodycam.backend.functions.getCurrentTime
 import com.jewer.bodycam.backend.functions.getFisheyeK
 import com.jewer.bodycam.backend.functions.getFisheyeScale
+import com.jewer.bodycam.backend.functions.getFullScreenPreviewStatus
 import com.jewer.bodycam.backend.functions.getInstructionAlertDialogStatus
 import com.jewer.bodycam.backend.functions.getLastBackZoomRatio
 import com.jewer.bodycam.backend.functions.getLastFrontZoomRatio
@@ -136,11 +137,18 @@ fun CameraScreen(navController: NavHostController) {
 
     var instructionAlertDialogIsVisible by remember { mutableStateOf(true) }
 
+    var isFullScreenPreviewApproved by remember { mutableStateOf(getFullScreenPreviewStatus(context)) }
+
     val previewView: PreviewView = remember {
         PreviewView(context).apply {
-            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-            scaleType = PreviewView.ScaleType.FIT_CENTER
+            implementationMode = PreviewView.ImplementationMode.PERFORMANCE
         }
+    }
+
+    previewView.scaleType = if (isFullScreenPreviewApproved) {
+        PreviewView.ScaleType.FILL_CENTER
+    } else {
+        PreviewView.ScaleType.FIT_CENTER
     }
 
     val isRecordingRunning by RecordService.isRecordingRunning.collectAsStateWithLifecycle()
@@ -278,6 +286,7 @@ fun CameraScreen(navController: NavHostController) {
         navController.currentBackStackEntryFlow.collect {
             chosenBrand.value = getBodycamBrand(context)
             isSimulatedWideAngleApproved = getSimulatedWideAngleStatus(context)
+            isFullScreenPreviewApproved = getFullScreenPreviewStatus(context)
             fisheyeK = getFisheyeK(context)
             fisheyeScale = getFisheyeScale(context)
             selectedBackCameraIdSetting = getSelectedBackCameraId(context)

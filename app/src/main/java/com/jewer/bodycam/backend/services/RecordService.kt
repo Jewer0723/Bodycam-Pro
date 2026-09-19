@@ -11,6 +11,7 @@ import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.provider.MediaStore
@@ -30,6 +31,11 @@ import com.jewer.bodycam.R
 import com.jewer.bodycam.backend.camera.CameraManager
 import com.jewer.bodycam.backend.functions.getBeepSoundStatus
 import com.jewer.bodycam.backend.functions.getBodycamBrand
+import com.jewer.bodycam.backend.functions.getFisheyeK
+import com.jewer.bodycam.backend.functions.getFisheyeScale
+import com.jewer.bodycam.backend.functions.getOrientationMode
+import com.jewer.bodycam.backend.functions.getSimulatedWideAngleStatus
+import com.jewer.bodycam.backend.functions.getUserName
 import com.jewer.bodycam.backend.functions.getVibrateAndBeepTimeInterval
 import com.jewer.bodycam.backend.functions.getVibrateStatus
 import com.jewer.bodycam.backend.functions.getVideoQuality
@@ -91,7 +97,7 @@ class RecordService: Service(), LifecycleOwner {
                 startForeground(1, notification)
             }
         } catch (e: Exception) {
-            Log.e("ScreenRecordService", "Failed to start foreground", e)
+            Log.e("RecordService", "Failed to start foreground", e)
             stopSelf()
             return START_NOT_STICKY
         }
@@ -123,29 +129,42 @@ class RecordService: Service(), LifecycleOwner {
 
         try {
             val cameraProvider = ProcessCameraProvider.getInstance(this).get()
-            val surfaceProcessor = CameraManager.surfaceProcessor
             val qualitySetting = getVideoQuality(applicationContext)
-            if (surfaceProcessor != null) {
-                CameraManager.bindCamera(
-                    context = applicationContext,
-                    cameraProvider = cameraProvider,
-                    lifecycleOwner = this,
-                    cameraSelector = CameraManager.currentCameraSelector,
-                    previewView = CameraManager.currentPreviewView,
-                    fps = CameraManager.currentFps,
-                    selectedQuality = qualitySetting
-                )
-            }
+            CameraManager.getOrCreateSurfaceProcessor(
+                context = applicationContext,
+                isPortrait = getOrientationMode(applicationContext) == 1,
+                isFrontCamera = false,
+                fisheyeK = getFisheyeK(applicationContext),
+                fisheyeScale = getFisheyeScale(applicationContext),
+                isFisheyeEnabled = getSimulatedWideAngleStatus(applicationContext),
+                brand = getBodycamBrand(applicationContext) ?: "AXON",
+                userName = getUserName(applicationContext),
+                isRecording = true
+            )
+
+            CameraManager.bindCamera(
+                context = applicationContext,
+                cameraProvider = cameraProvider,
+                lifecycleOwner = this,
+                cameraSelector = CameraManager.currentCameraSelector,
+                previewView = CameraManager.currentPreviewView,
+                fps = CameraManager.currentFps,
+                selectedQuality = qualitySetting
+            )
         } catch (e: Exception) {
-            Log.e("ScreenRecordService", "Error binding camera to RecordService", e)
+            Log.e("RecordService", "Error binding camera to RecordService", e)
         }
 
-        startRecordingFile()
+        val started = startRecordingFile()
+        if (!started) {
+            _isServiceRunning.value = false
+        }
         startPeriodicBeep()
     }
 
-    private fun startRecordingFile() {
-        val videoCapture = CameraManager.videoCapture ?: return
+    private fun startRecordingFile(): Boolean {
+        val qualitySetting = getVideoQuality(applicationContext)
+        val videoCapture = CameraManager.getOrCreateVideoCapture(qualitySetting)
         try {
             val filenameFormat = "yyyy-MM-dd-HH-mm-ss"
             val videoName = SimpleDateFormat(filenameFormat, Locale.US).format(Date()) + ".mp4"
@@ -155,6 +174,7 @@ class RecordService: Service(), LifecycleOwner {
                 put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/${getString(R.string.app_name)}")
+                    put(MediaStore.Video.Media.IS_PENDING, 1)
                 }
             }
 
@@ -165,7 +185,12 @@ class RecordService: Service(), LifecycleOwner {
 
             val recorder = videoCapture.output
             val pendingRecording: PendingRecording = if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                recorder.prepareRecording(this, mediaStoreOutputOptions).withAudioEnabled()
+                try {
+                    recorder.prepareRecording(this, mediaStoreOutputOptions).withAudioEnabled()
+                } catch (e: Exception) {
+                    Log.e("RecordService", "withAudioEnabled failed, falling back to silent video", e)
+                    recorder.prepareRecording(this, mediaStoreOutputOptions)
+                }
             } else {
                 recorder.prepareRecording(this, mediaStoreOutputOptions)
             }
@@ -177,14 +202,29 @@ class RecordService: Service(), LifecycleOwner {
                     }
                     is VideoRecordEvent.Finalize -> {
                         _isServiceRunning.value = false
+
+                        val outputUri = recordEvent.outputResults.outputUri
+                        if (outputUri != Uri.EMPTY && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            val updateValues = ContentValues().apply {
+                                put(MediaStore.Video.Media.IS_PENDING, 0)
+                            }
+                            try {
+                                contentResolver.update(outputUri, updateValues, null, null)
+                            } catch (e: Exception) {
+                                Log.e("RecordService", "Error clearing IS_PENDING", e)
+                            }
+                        }
+
                         if (recordEvent.hasError()) {
-                            Log.e("ScreenRecordService", "VideoCapture error: ${recordEvent.error}")
+                            Log.e("RecordService", "VideoCapture error: ${recordEvent.error}, cause: ${recordEvent.cause}")
                         }
                     }
                 }
             }
+            return true
         } catch (e: Exception) {
-            Log.e("ScreenRecordService", "Failed to start VideoCapture recording", e)
+            Log.e("RecordService", "Failed to start VideoCapture recording", e)
+            return false
         }
     }
 
@@ -206,7 +246,7 @@ class RecordService: Service(), LifecycleOwner {
                 playSound(applicationContext, soundRes)
             }
         } catch (e: Exception) {
-            Log.e("ScreenRecordService", "activeRecording.stop failed", e)
+            Log.e("RecordService", "activeRecording.stop failed", e)
         } finally {
             stopService()
         }

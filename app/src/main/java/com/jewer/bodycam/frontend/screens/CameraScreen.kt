@@ -445,7 +445,7 @@ fun CameraScreen(navController: NavHostController) {
                 Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                     SelectionContainer {
                         Text(
-                            text =  "●  You can use record button or volume key to record (open in settings).\n\n" +
+                            text =  "●  You can use record button or volume keys (Double-press Volume UP to start, Long-press Volume DOWN to stop).\n\n" +
                                     "●  When is recording, you can close the screen or turn to background, \u201CBodycam\u201D will still recording. \n\n" +
                                     "●  Record result will be stored in \u201CBodycam\u201D folder in device media store space (you have to authorize media access first).\n\n" +
                                     "●  There are multiple bodycam brand can choose.\n\n" +

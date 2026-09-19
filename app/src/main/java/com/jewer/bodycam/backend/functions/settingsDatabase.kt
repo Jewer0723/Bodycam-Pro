@@ -241,6 +241,20 @@ fun getKeyRecordingStatus(context: Context): Boolean {
     return sharedPreferences.getBoolean("keyRecording", false)
 }
 
+// 更新按鍵操作方式 ("Default" 預設按一次, "Simulated" 仿真雙擊+/長按-)
+fun updateKeyOperationMode(context: Context, mode: String) {
+    val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    sharedPreferences.edit {
+        putString("keyOperationMode", mode)
+    }
+}
+
+// 讀取按鍵操作方式 (預設 "Default")
+fun getKeyOperationMode(context: Context): String {
+    val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    return sharedPreferences.getString("keyOperationMode", "Default") ?: "Default"
+}
+
 /******************************************************************************************************************/
 
 

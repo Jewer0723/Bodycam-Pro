@@ -61,6 +61,7 @@ import com.jewer.bodycam.backend.functions.getFisheyeK
 import com.jewer.bodycam.backend.functions.getFisheyeScale
 import com.jewer.bodycam.backend.functions.getFlashlightStatus
 import com.jewer.bodycam.backend.functions.getFullScreenPreviewStatus
+import com.jewer.bodycam.backend.functions.getKeyOperationMode
 import com.jewer.bodycam.backend.functions.getKeyRecordingStatus
 import com.jewer.bodycam.backend.functions.getLowBrightnessStatus
 import com.jewer.bodycam.backend.functions.getOrientationMode
@@ -82,6 +83,7 @@ import com.jewer.bodycam.backend.functions.updateFisheyeK
 import com.jewer.bodycam.backend.functions.updateFisheyeScale
 import com.jewer.bodycam.backend.functions.updateFlashlightStatus
 import com.jewer.bodycam.backend.functions.updateFullScreenPreviewStatus
+import com.jewer.bodycam.backend.functions.updateKeyOperationMode
 import com.jewer.bodycam.backend.functions.updateKeyRecordingStatus
 import com.jewer.bodycam.backend.functions.updateLowBrightnessStatus
 import com.jewer.bodycam.backend.functions.updateOrientationMode
@@ -470,20 +472,56 @@ fun SettingScreen(
                     }
                 }
 
-                // 音量鍵錄錄影
+                // 音量鍵控制錄影
                 TextButton(onClick = {
                     isKeyRecordingChecked.value = !isKeyRecordingChecked.value
                     updateKeyRecordingStatus(context, isKeyRecordingChecked.value)
                     if (isKeyRecordingChecked.value) playFeedback()
                 }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = "Volume Keys Record (Up: Start / Down: Stop)", textAlign = TextAlign.Start, modifier = Modifier.weight(1f), color = White)
+                        Text(text = "Volume Keys Record", textAlign = TextAlign.Start, modifier = Modifier.weight(1f), color = White)
                         Switch(checked = isKeyRecordingChecked.value, onCheckedChange = {
                             isKeyRecordingChecked.value = it
                             updateKeyRecordingStatus(context, it)
                             if (isKeyRecordingChecked.value) playFeedback()
                         },
                             colors = SwitchDefaults.colors(checkedThumbColor = White, uncheckedThumbColor = White, checkedTrackColor = DarkYellow, uncheckedTrackColor = Gray))
+                    }
+                }
+
+                // 音量鍵操作方式選單 (僅在開啟音量鍵控制時顯示)
+                if (isKeyRecordingChecked.value) {
+                    var keyOperationMode by remember { mutableStateOf(getKeyOperationMode(context)) }
+                    var keyModeExpand by remember { mutableStateOf(false) }
+                    TextButton(onClick = { keyModeExpand = !keyModeExpand }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "Key Operation Mode", textAlign = TextAlign.Start, modifier = Modifier.weight(1f), color = White)
+                            Text(text = if (keyOperationMode == "Simulated") "Simulated (Double Vol+ / Long Vol-)" else "Default (Press once)", color = DarkYellow)
+                            DropdownMenu(
+                                expanded = keyModeExpand,
+                                onDismissRequest = { keyModeExpand = false },
+                                modifier = Modifier.border(1.dp, White)
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Default (Press once)", color = White) },
+                                    onClick = {
+                                        keyOperationMode = "Default"
+                                        updateKeyOperationMode(context, "Default")
+                                        keyModeExpand = false
+                                        playFeedback()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Simulated (Double Vol+ / Long Vol-)", color = White) },
+                                    onClick = {
+                                        keyOperationMode = "Simulated"
+                                        updateKeyOperationMode(context, "Simulated")
+                                        keyModeExpand = false
+                                        playFeedback()
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -663,7 +701,7 @@ fun SettingScreen(
             text = { Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                 SelectionContainer {
                     Text(
-                        text =  "●  You can use record button or volume key to record (open in settings).\n\n" +
+                        text =  "●  You can use record button or volume keys (Double-press Volume UP to start, Long-press Volume DOWN to stop).\n\n" +
                                 "●  When is recording, you can close the screen or turn to background, \u201CBodycam\u201D will still recording. \n\n" +
                                 "●  Record result will be stored in \u201CBodycam\u201D folder in device media store space (you have to authorize media access first).\n\n" +
                                 "●  There are multiple bodycam brand can choose.\n\n" +

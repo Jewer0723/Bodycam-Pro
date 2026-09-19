@@ -19,6 +19,7 @@ import com.google.android.play.core.appupdate.AppUpdateManagerFactory
 import com.google.android.play.core.appupdate.AppUpdateOptions
 import com.google.android.play.core.install.model.AppUpdateType
 import com.google.android.play.core.install.model.UpdateAvailability
+import com.jewer.bodycam.backend.functions.getKeyOperationMode
 import com.jewer.bodycam.backend.functions.getKeyRecordingStatus
 import com.jewer.bodycam.backend.functions.initSettings
 import com.jewer.bodycam.backend.functions.orientationFlow
@@ -109,32 +110,74 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private var lastVolumeUpTime = 0L
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (getKeyRecordingStatus(this)) {
             val isRecording = RecordService.isRecordingRunning.value
+            val isSimulated = getKeyOperationMode(this) == "Simulated"
+
             when (keyCode) {
                 KeyEvent.KEYCODE_VOLUME_UP -> {
-                    // 只有在【未錄影】狀態下才觸發開始錄影，防止重複錄影
-                    if (!isRecording) {
-                        val intent = Intent(applicationContext, RecordService::class.java).apply {
-                            action = RecordService.START_RECORDING
+                    if (isSimulated) {
+                        val now = System.currentTimeMillis()
+                        // 仿真模式：短按兩次音量+
+                        if (now - lastVolumeUpTime < 400L) {
+                            lastVolumeUpTime = 0L
+                            if (!isRecording) {
+                                val intent = Intent(applicationContext, RecordService::class.java).apply {
+                                    action = RecordService.START_RECORDING
+                                }
+                                startForegroundService(intent)
+                            }
+                        } else {
+                            lastVolumeUpTime = now
                         }
-                        startForegroundService(intent)
+                    } else {
+                        // 預設模式：單按一次音量+ 開始錄影
+                        if (!isRecording) {
+                            val intent = Intent(applicationContext, RecordService::class.java).apply {
+                                action = RecordService.START_RECORDING
+                            }
+                            startForegroundService(intent)
+                        }
                     }
                     return true
                 }
                 KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                    // 只有在【錄影中】狀態下才觸發停止錄影
-                    if (isRecording) {
-                        val intent = Intent(applicationContext, RecordService::class.java).apply {
-                            action = RecordService.STOP_RECORDING
+                    if (isSimulated) {
+                        // 仿真模式：追蹤長按手勢
+                        event?.startTracking()
+                    } else {
+                        // 預設模式：單按一次音量- 停止錄影
+                        if (isRecording) {
+                            val intent = Intent(applicationContext, RecordService::class.java).apply {
+                                action = RecordService.STOP_RECORDING
+                            }
+                            startService(intent)
                         }
-                        startService(intent)
                     }
                     return true
                 }
             }
         }
         return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyLongPress(keyCode: Int, event: KeyEvent?): Boolean {
+        if (getKeyRecordingStatus(this) && getKeyOperationMode(this) == "Simulated") {
+            val isRecording = RecordService.isRecordingRunning.value
+            if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+                // 仿真模式長按一次音量-：觸發停止錄影
+                if (isRecording) {
+                    val intent = Intent(applicationContext, RecordService::class.java).apply {
+                        action = RecordService.STOP_RECORDING
+                    }
+                    startService(intent)
+                }
+                return true
+            }
+        }
+        return super.onKeyLongPress(keyCode, event)
     }
 }

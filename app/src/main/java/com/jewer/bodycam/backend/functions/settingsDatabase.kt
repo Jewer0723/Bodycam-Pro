@@ -2,6 +2,7 @@ package com.jewer.bodycam.backend.functions
 
 import android.content.Context
 import androidx.core.content.edit
+import com.jewer.bodycam.R
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -100,6 +101,36 @@ fun updateBeepVolume(context: Context, volume: Int) {
 fun getBeepVolume(context: Context): Int {
     val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
     return sharedPreferences.getInt("beepVolume", 30)
+}
+
+// 更新錄影提示音種類 ("New" [buttontouchedsound] 或 "Old" [axonstartrecordsound])
+fun updateRecordSoundType(context: Context, type: String) {
+    val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    sharedPreferences.edit {
+        putString("recordSoundType", type)
+    }
+}
+
+// 讀取錄影提示音種類 (預設 "New")
+fun getRecordSoundType(context: Context): String {
+    val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    return sharedPreferences.getString("recordSoundType", "New") ?: "New"
+}
+
+// 根據品牌與設定獲取開始/循環錄影提示音資源 ID
+fun getStartRecordSoundRes(context: Context): Int {
+    val brand = getBodycamBrand(context)
+    if (brand == "MOTOROLA") {
+        return R.raw.motorolastartrecordsound
+    }
+    val type = getRecordSoundType(context)
+    return if (type == "Old") R.raw.axonstartrecordsound else R.raw.buttontouchedsound
+}
+
+// 根據品牌與設定獲取結束錄影提示音資源 ID (保持不變)
+fun getStopRecordSoundRes(context: Context): Int {
+    val brand = getBodycamBrand(context)
+    return if (brand == "MOTOROLA") R.raw.motorolastoprecordsound else R.raw.axonstoprecordsound
 }
 
 /******************************************************************************************************************/

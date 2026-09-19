@@ -35,6 +35,8 @@ import com.jewer.bodycam.backend.functions.getFisheyeK
 import com.jewer.bodycam.backend.functions.getFisheyeScale
 import com.jewer.bodycam.backend.functions.getOrientationMode
 import com.jewer.bodycam.backend.functions.getSimulatedWideAngleStatus
+import com.jewer.bodycam.backend.functions.getStartRecordSoundRes
+import com.jewer.bodycam.backend.functions.getStopRecordSoundRes
 import com.jewer.bodycam.backend.functions.getUserName
 import com.jewer.bodycam.backend.functions.getVibrateAndBeepTimeInterval
 import com.jewer.bodycam.backend.functions.getVibrateStatus
@@ -241,8 +243,7 @@ class RecordService: Service(), LifecycleOwner {
 
             val beepApproved = getBeepSoundStatus(applicationContext)
             if (beepApproved) {
-                val brand = getBodycamBrand(applicationContext)
-                val soundRes = if (brand == "MOTOROLA") R.raw.motorolastoprecordsound else R.raw.axonstoprecordsound
+                val soundRes = getStopRecordSoundRes(applicationContext)
                 playSound(applicationContext, soundRes)
             }
         } catch (e: Exception) {
@@ -263,11 +264,10 @@ class RecordService: Service(), LifecycleOwner {
             while (_isServiceRunning.value) {
                 val beepApproved = getBeepSoundStatus(applicationContext)
                 val vibrateApproved = getVibrateStatus(applicationContext)
-                val brand = getBodycamBrand(applicationContext)
                 val interval = getVibrateAndBeepTimeInterval(applicationContext)
 
                 if (beepApproved) {
-                    val soundRes = if (brand == "MOTOROLA") R.raw.motorolastartrecordsound else R.raw.axonstartrecordsound
+                    val soundRes = getStartRecordSoundRes(applicationContext)
                     playSound(applicationContext, soundRes)
                 }
                 if (vibrateApproved) {

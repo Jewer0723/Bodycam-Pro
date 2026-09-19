@@ -64,9 +64,11 @@ import com.jewer.bodycam.backend.functions.getFullScreenPreviewStatus
 import com.jewer.bodycam.backend.functions.getKeyRecordingStatus
 import com.jewer.bodycam.backend.functions.getLowBrightnessStatus
 import com.jewer.bodycam.backend.functions.getOrientationMode
+import com.jewer.bodycam.backend.functions.getRecordSoundType
 import com.jewer.bodycam.backend.functions.getSelectedBackCameraId
 import com.jewer.bodycam.backend.functions.getSelectedFrontCameraId
 import com.jewer.bodycam.backend.functions.getSimulatedWideAngleStatus
+import com.jewer.bodycam.backend.functions.getStartRecordSoundRes
 import com.jewer.bodycam.backend.functions.getUserName
 import com.jewer.bodycam.backend.functions.getVibrateAndBeepTimeInterval
 import com.jewer.bodycam.backend.functions.getVibrateStatus
@@ -83,6 +85,7 @@ import com.jewer.bodycam.backend.functions.updateFullScreenPreviewStatus
 import com.jewer.bodycam.backend.functions.updateKeyRecordingStatus
 import com.jewer.bodycam.backend.functions.updateLowBrightnessStatus
 import com.jewer.bodycam.backend.functions.updateOrientationMode
+import com.jewer.bodycam.backend.functions.updateRecordSoundType
 import com.jewer.bodycam.backend.functions.updateSelectedBackCameraId
 import com.jewer.bodycam.backend.functions.updateSelectedFrontCameraId
 import com.jewer.bodycam.backend.functions.updateSimulatedWideAngleStatus
@@ -126,6 +129,7 @@ fun SettingScreen(
     val isFullScreenPreviewChecked = remember { mutableStateOf(getFullScreenPreviewStatus(context)) }
     val isKeyRecordingChecked = remember { mutableStateOf(getKeyRecordingStatus(context)) }
     val isSimulatedWideAngleChecked = remember { mutableStateOf(getSimulatedWideAngleStatus(context)) }
+    var recordSoundType by remember { mutableStateOf(getRecordSoundType(context)) }
     var fisheyeK by remember { mutableFloatStateOf(getFisheyeK(context)) }
     var fisheyeScale by remember { mutableFloatStateOf(getFisheyeScale(context)) }
     val chosenOrientationMode = remember { mutableIntStateOf(getOrientationMode(context)) }
@@ -322,10 +326,48 @@ fun SettingScreen(
                                 beepVolume = it.roundToInt()
                                 updateBeepVolume(context, beepVolume)
                             },
+                            onValueChangeFinished = {
+                                playFeedback()
+                            },
                             valueRange = 0f..100f,
                             steps = 99,
                             colors = SliderDefaults.colors(thumbColor = DarkYellow, activeTrackColor = DarkYellow)
                         )
+                    }
+                }
+
+                // 錄影提示音效種類 (除了 Motorola 外的所有品牌可選擇 New [預設] 或 Old)
+                if (isBeepSoundChecked.value && chosenBrandState.value != "MOTOROLA") {
+                    var recordSoundExpand by remember { mutableStateOf(false) }
+                    TextButton(onClick = { recordSoundExpand = !recordSoundExpand }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "Record Sound", textAlign = TextAlign.Start, modifier = Modifier.weight(1f), color = White)
+                            Text(text = if (recordSoundType == "Old") "Old" else "New", color = DarkYellow)
+                            DropdownMenu(
+                                expanded = recordSoundExpand,
+                                onDismissRequest = { recordSoundExpand = false },
+                                modifier = Modifier.border(1.dp, White)
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("New", color = White) },
+                                    onClick = {
+                                        recordSoundType = "New"
+                                        updateRecordSoundType(context, "New")
+                                        recordSoundExpand = false
+                                        playSound(context, getStartRecordSoundRes(context))
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Old", color = White) },
+                                    onClick = {
+                                        recordSoundType = "Old"
+                                        updateRecordSoundType(context, "Old")
+                                        recordSoundExpand = false
+                                        playSound(context, getStartRecordSoundRes(context))
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
 

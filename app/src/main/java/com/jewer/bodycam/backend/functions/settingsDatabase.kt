@@ -187,6 +187,34 @@ fun getLowBrightnessStatus(context: Context): Boolean {
     return sharedPreferences.getBoolean("lowBrightness", false)
 }
 
+// 更新靜音錄影模式布林狀態 (只錄影像沒有聲音)
+fun updateSilentVideoStatus(context: Context, isEnabled: Boolean) {
+    val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    sharedPreferences.edit {
+        putBoolean("silentVideo", isEnabled)
+    }
+}
+
+// 讀取靜音錄影模式布林狀態 (預設 false)
+fun getSilentVideoStatus(context: Context): Boolean {
+    val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    return sharedPreferences.getBoolean("silentVideo", false)
+}
+
+// 更新錄影前幾秒靜音秒數設定 (0, 5, 10, 20, 30 秒)
+fun updateMuteFirstSeconds(context: Context, seconds: Int) {
+    val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    sharedPreferences.edit {
+        putInt("muteFirstSeconds", seconds)
+    }
+}
+
+// 讀取錄影前幾秒靜音秒數設定 (預設 999 即 Full Mute)
+fun getMuteFirstSeconds(context: Context): Int {
+    val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    return sharedPreferences.getInt("muteFirstSeconds", 999)
+}
+
 /******************************************************************************************************************/
 
 /**********************************************************************************************************/

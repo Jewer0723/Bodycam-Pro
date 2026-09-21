@@ -22,6 +22,7 @@ import androidx.camera.video.VideoCapture
 import androidx.camera.view.PreviewView
 import androidx.lifecycle.LifecycleOwner
 import com.jewer.bodycam.backend.functions.getFlashlightStatus
+import com.jewer.bodycam.backend.services.RecordService
 import java.util.concurrent.Executors
 
 object CameraManager {
@@ -101,6 +102,7 @@ object CameraManager {
                 else -> listOf(Quality.SD, Quality.LOWEST, Quality.HIGHEST)
             }
             val newRecorder = Recorder.Builder()
+                .setExecutor(Executors.newSingleThreadExecutor())
                 .setQualitySelector(
                     QualitySelector.fromOrderedList(
                         qualityList,
@@ -131,6 +133,13 @@ object CameraManager {
         currentFps = fps
         currentQuality = selectedQuality
 
+        // 若當前未在錄影中，每次重新綁定相機時重置 VideoCapture 實例，
+        // 避免將舊的 VideoCapture 重複加入新的 UseCaseGroup 導致 CameraX 拋出：
+        // IllegalArgumentException: Provider is already set (SettableSurface.setProvider)
+        if (!RecordService.isRecordingRunning.value) {
+            videoCapture = null
+        }
+
         val vCap = getOrCreateVideoCapture(selectedQuality)
         val effect = wideAngleEffect ?: return null
 
@@ -150,7 +159,11 @@ object CameraManager {
         }
 
         try {
-            cameraProvider.unbindAll()
+            try {
+                cameraProvider.unbindAll()
+            } catch (e: Throwable) {
+                Log.e("CameraManager", "Error in unbindAll", e)
+            }
 
             val useCaseGroup = UseCaseGroup.Builder()
                 .addUseCase(newPreview)
@@ -162,11 +175,15 @@ object CameraManager {
             activeCamera = camera
 
             if (getFlashlightStatus(context) && camera.cameraInfo.hasFlashUnit()) {
-                camera.cameraControl.enableTorch(true)
+                try {
+                    camera.cameraControl.enableTorch(true)
+                } catch (e: Throwable) {
+                    Log.e("CameraManager", "enableTorch error", e)
+                }
             }
 
             return camera
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.e("CameraManager", "bindCamera error", e)
             return null
         }

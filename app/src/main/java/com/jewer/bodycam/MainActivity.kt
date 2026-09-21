@@ -11,6 +11,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.camera2.Camera2Config
+import androidx.camera.core.CameraXConfig
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -27,7 +29,13 @@ import com.jewer.bodycam.backend.functions.setFullScreen
 import com.jewer.bodycam.backend.services.RecordService
 import com.jewer.bodycam.frontend.screens.PermissionScreen
 
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), CameraXConfig.Provider {
+
+    override fun getCameraXConfig(): CameraXConfig {
+        return CameraXConfig.Builder.fromConfig(Camera2Config.defaultConfig())
+            .setMinimumLoggingLevel(Log.ERROR)
+            .build()
+    }
 
     private lateinit var appUpdateManager: AppUpdateManager
     

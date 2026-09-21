@@ -64,10 +64,12 @@ import com.jewer.bodycam.backend.functions.getFullScreenPreviewStatus
 import com.jewer.bodycam.backend.functions.getKeyOperationMode
 import com.jewer.bodycam.backend.functions.getKeyRecordingStatus
 import com.jewer.bodycam.backend.functions.getLowBrightnessStatus
+import com.jewer.bodycam.backend.functions.getMuteFirstSeconds
 import com.jewer.bodycam.backend.functions.getOrientationMode
 import com.jewer.bodycam.backend.functions.getRecordSoundType
 import com.jewer.bodycam.backend.functions.getSelectedBackCameraId
 import com.jewer.bodycam.backend.functions.getSelectedFrontCameraId
+import com.jewer.bodycam.backend.functions.getSilentVideoStatus
 import com.jewer.bodycam.backend.functions.getSimulatedWideAngleStatus
 import com.jewer.bodycam.backend.functions.getStartRecordSoundRes
 import com.jewer.bodycam.backend.functions.getUserName
@@ -86,10 +88,12 @@ import com.jewer.bodycam.backend.functions.updateFullScreenPreviewStatus
 import com.jewer.bodycam.backend.functions.updateKeyOperationMode
 import com.jewer.bodycam.backend.functions.updateKeyRecordingStatus
 import com.jewer.bodycam.backend.functions.updateLowBrightnessStatus
+import com.jewer.bodycam.backend.functions.updateMuteFirstSeconds
 import com.jewer.bodycam.backend.functions.updateOrientationMode
 import com.jewer.bodycam.backend.functions.updateRecordSoundType
 import com.jewer.bodycam.backend.functions.updateSelectedBackCameraId
 import com.jewer.bodycam.backend.functions.updateSelectedFrontCameraId
+import com.jewer.bodycam.backend.functions.updateSilentVideoStatus
 import com.jewer.bodycam.backend.functions.updateSimulatedWideAngleStatus
 import com.jewer.bodycam.backend.functions.updateUserName
 import com.jewer.bodycam.backend.functions.updateVibrateAndBeepTimeInterval
@@ -131,6 +135,8 @@ fun SettingScreen(
     val isFullScreenPreviewChecked = remember { mutableStateOf(getFullScreenPreviewStatus(context)) }
     val isKeyRecordingChecked = remember { mutableStateOf(getKeyRecordingStatus(context)) }
     val isSimulatedWideAngleChecked = remember { mutableStateOf(getSimulatedWideAngleStatus(context)) }
+    var isSilentVideoChecked by remember { mutableStateOf(getSilentVideoStatus(context)) }
+    var muteFirstSeconds by remember { mutableIntStateOf(getMuteFirstSeconds(context)) }
     var recordSoundType by remember { mutableStateOf(getRecordSoundType(context)) }
     var fisheyeK by remember { mutableFloatStateOf(getFisheyeK(context)) }
     var fisheyeScale by remember { mutableFloatStateOf(getFisheyeScale(context)) }
@@ -368,6 +374,59 @@ fun SettingScreen(
                                         playSound(context, getStartRecordSoundRes(context))
                                     }
                                 )
+                            }
+                        }
+                    }
+                }
+
+                // 靜音模式開關 (開啟後顯示秒數設定)
+                TextButton(onClick = {
+                    isSilentVideoChecked = !isSilentVideoChecked
+                    updateSilentVideoStatus(context, isSilentVideoChecked)
+                    if (isSilentVideoChecked && muteFirstSeconds == 0) {
+                        muteFirstSeconds = 999
+                        updateMuteFirstSeconds(context, 999)
+                    }
+                    playFeedback()
+                }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "Initial / Full Mute Mode", textAlign = TextAlign.Start, modifier = Modifier.weight(1f), color = White)
+                        Switch(checked = isSilentVideoChecked, onCheckedChange = {
+                            isSilentVideoChecked = it
+                            updateSilentVideoStatus(context, it)
+                            if (it && muteFirstSeconds == 0) {
+                                muteFirstSeconds = 999
+                                updateMuteFirstSeconds(context, 999)
+                            }
+                            playFeedback()
+                        },
+                            colors = SwitchDefaults.colors(checkedThumbColor = White, uncheckedThumbColor = White, checkedTrackColor = DarkYellow, uncheckedTrackColor = Gray))
+                    }
+                }
+
+                // 靜音秒數設定 (僅在開啟靜音模式時出現)
+                if (isSilentVideoChecked) {
+                    var muteSecondsExpand by remember { mutableStateOf(false) }
+                    TextButton(onClick = { muteSecondsExpand = !muteSecondsExpand }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "Mute Duration", textAlign = TextAlign.Start, modifier = Modifier.weight(1f), color = White)
+                            Text(text = if (muteFirstSeconds >= 999) "Full Mute" else "${muteFirstSeconds}s", color = DarkYellow)
+                            DropdownMenu(
+                                expanded = muteSecondsExpand,
+                                onDismissRequest = { muteSecondsExpand = false },
+                                modifier = Modifier.border(1.dp, White)
+                            ) {
+                                listOf(999, 5, 10, 20, 30).forEach { sec ->
+                                    DropdownMenuItem(
+                                        text = { Text(text = if (sec >= 999) "Full Mute" else "${sec}s", color = White) },
+                                        onClick = {
+                                            muteFirstSeconds = sec
+                                            updateMuteFirstSeconds(context, sec)
+                                            muteSecondsExpand = false
+                                            playFeedback()
+                                        }
+                                    )
+                                }
                             }
                         }
                     }

@@ -33,7 +33,9 @@ import com.jewer.bodycam.backend.functions.getBeepSoundStatus
 import com.jewer.bodycam.backend.functions.getBodycamBrand
 import com.jewer.bodycam.backend.functions.getFisheyeK
 import com.jewer.bodycam.backend.functions.getFisheyeScale
+import com.jewer.bodycam.backend.functions.getMuteFirstSeconds
 import com.jewer.bodycam.backend.functions.getOrientationMode
+import com.jewer.bodycam.backend.functions.getSilentVideoStatus
 import com.jewer.bodycam.backend.functions.getSimulatedWideAngleStatus
 import com.jewer.bodycam.backend.functions.getStartRecordSoundRes
 import com.jewer.bodycam.backend.functions.getStopRecordSoundRes
@@ -129,39 +131,43 @@ class RecordService: Service(), LifecycleOwner {
             vibrateOnce(applicationContext, 1000)
         }
 
-        try {
-            val cameraProvider = ProcessCameraProvider.getInstance(this).get()
-            val qualitySetting = getVideoQuality(applicationContext)
-            CameraManager.getOrCreateSurfaceProcessor(
-                context = applicationContext,
-                isPortrait = getOrientationMode(applicationContext) == 1,
-                isFrontCamera = false,
-                fisheyeK = getFisheyeK(applicationContext),
-                fisheyeScale = getFisheyeScale(applicationContext),
-                isFisheyeEnabled = getSimulatedWideAngleStatus(applicationContext),
-                brand = getBodycamBrand(applicationContext) ?: "AXON",
-                userName = getUserName(applicationContext),
-                isRecording = true
-            )
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+        cameraProviderFuture.addListener({
+            try {
+                val cameraProvider = cameraProviderFuture.get()
+                val qualitySetting = getVideoQuality(applicationContext)
+                CameraManager.getOrCreateSurfaceProcessor(
+                    context = applicationContext,
+                    isPortrait = getOrientationMode(applicationContext) == 1,
+                    isFrontCamera = false,
+                    fisheyeK = getFisheyeK(applicationContext),
+                    fisheyeScale = getFisheyeScale(applicationContext),
+                    isFisheyeEnabled = getSimulatedWideAngleStatus(applicationContext),
+                    brand = getBodycamBrand(applicationContext) ?: "AXON",
+                    userName = getUserName(applicationContext),
+                    isRecording = true
+                )
 
-            CameraManager.bindCamera(
-                context = applicationContext,
-                cameraProvider = cameraProvider,
-                lifecycleOwner = this,
-                cameraSelector = CameraManager.currentCameraSelector,
-                previewView = CameraManager.currentPreviewView,
-                fps = CameraManager.currentFps,
-                selectedQuality = qualitySetting
-            )
-        } catch (e: Exception) {
-            Log.e("RecordService", "Error binding camera to RecordService", e)
-        }
+                CameraManager.bindCamera(
+                    context = applicationContext,
+                    cameraProvider = cameraProvider,
+                    lifecycleOwner = this,
+                    cameraSelector = CameraManager.currentCameraSelector,
+                    previewView = CameraManager.currentPreviewView,
+                    fps = CameraManager.currentFps,
+                    selectedQuality = qualitySetting
+                )
 
-        val started = startRecordingFile()
-        if (!started) {
-            _isServiceRunning.value = false
-        }
-        startPeriodicBeep()
+                val started = startRecordingFile()
+                if (!started) {
+                    _isServiceRunning.value = false
+                }
+                startPeriodicBeep()
+            } catch (e: Exception) {
+                Log.e("RecordService", "Error binding camera to RecordService", e)
+                _isServiceRunning.value = false
+            }
+        }, ContextCompat.getMainExecutor(this))
     }
 
     private fun startRecordingFile(): Boolean {
@@ -185,8 +191,12 @@ class RecordService: Service(), LifecycleOwner {
                 .setContentValues(contentValues)
                 .build()
 
+            val isMuteMode = getSilentVideoStatus(applicationContext)
+            val muteSeconds = getMuteFirstSeconds(applicationContext)
+            val isFullMute = isMuteMode && muteSeconds >= 999
+
             val recorder = videoCapture.output
-            val pendingRecording: PendingRecording = if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            val pendingRecording: PendingRecording = if ((!isMuteMode || !isFullMute) && ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                 try {
                     recorder.prepareRecording(this, mediaStoreOutputOptions).withAudioEnabled()
                 } catch (e: Exception) {
@@ -201,10 +211,27 @@ class RecordService: Service(), LifecycleOwner {
                 when (recordEvent) {
                     is VideoRecordEvent.Start -> {
                         _isServiceRunning.value = true
+
+                        // 開啟靜音模式且指定前幾秒靜音 (例如 5, 10, 20, 30 秒)
+                        if (isMuteMode && muteSeconds in 1..998) {
+                            try {
+                                activeRecording?.mute(true)
+                                serviceScope.launch {
+                                    delay((muteSeconds * 1000L).milliseconds)
+                                    if (_isServiceRunning.value && activeRecording != null) {
+                                        try {
+                                            activeRecording?.mute(false)
+                                        } catch (e: Exception) {
+                                            Log.e("RecordService", "Error unmuting recording audio", e)
+                                        }
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.e("RecordService", "Error muting first seconds", e)
+                            }
+                        }
                     }
                     is VideoRecordEvent.Finalize -> {
-                        _isServiceRunning.value = false
-
                         val outputUri = recordEvent.outputResults.outputUri
                         if (outputUri != Uri.EMPTY && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                             val updateValues = ContentValues().apply {
@@ -219,6 +246,18 @@ class RecordService: Service(), LifecycleOwner {
 
                         if (recordEvent.hasError()) {
                             Log.e("RecordService", "VideoCapture error: ${recordEvent.error}, cause: ${recordEvent.cause}")
+                            // 若前台服務意圖仍為開啟（非使用者手動停止，而是編碼器內部非預期中斷），觸發自動重連續錄機制
+                            if (_isServiceRunning.value) {
+                                serviceScope.launch {
+                                    delay(300.milliseconds)
+                                    if (_isServiceRunning.value) {
+                                        Log.w("RecordService", "Auto-recovering from VideoCapture error...")
+                                        startRecordingFile()
+                                    }
+                                }
+                            }
+                        } else {
+                            _isServiceRunning.value = false
                         }
                     }
                 }
@@ -232,6 +271,7 @@ class RecordService: Service(), LifecycleOwner {
 
     private fun stopRecordingLogic() {
         if (!_isServiceRunning.value && activeRecording == null) return
+        _isServiceRunning.value = false
         try {
             activeRecording?.stop()
             activeRecording = null

@@ -15,8 +15,8 @@ configure<ApplicationExtension> {
         applicationId = "com.jewer.bodycam"
         minSdk = 26
         targetSdk = 37
-        versionCode = 63
-        versionName = "2.0.63"
+        versionCode = 65
+        versionName = "2.0.65"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

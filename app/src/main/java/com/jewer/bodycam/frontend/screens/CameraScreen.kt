@@ -317,7 +317,7 @@ fun CameraScreen(navController: NavHostController) {
                 selectedQuality = selectedQualitySetting
             )
             activeCamera = camera
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.e("CameraPreview", "Error initializing camera", e)
         }
     }

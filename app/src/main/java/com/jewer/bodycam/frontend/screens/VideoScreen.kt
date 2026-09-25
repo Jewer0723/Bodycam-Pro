@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.provider.Settings
+import android.util.Log
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.Toast
@@ -69,13 +70,16 @@ import androidx.navigation.NavController
 import coil.ImageLoader
 import coil.compose.AsyncImage
 import coil.decode.VideoFrameDecoder
+import coil.memory.MemoryCache
 import com.jewer.bodycam.R
 import com.jewer.bodycam.backend.functions.PermissionUtils
 import com.jewer.bodycam.frontend.nav.NAV
 import com.jewer.bodycam.ui.theme.Black
 import com.jewer.bodycam.ui.theme.DarkYellow
 import com.jewer.bodycam.ui.theme.White
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -98,19 +102,24 @@ fun VideoScreen(navController: NavController) {
     var isLoading by remember { mutableStateOf(true) }
     var selectedVideoUri by remember { mutableStateOf<Uri?>(null) }
 
-    // 設定 Coil VideoFrameDecoder
+    // 設定 Coil VideoFrameDecoder 搭配 10% 低記憶體快取，防止長影片縮圖記憶體暴增
     val imageLoader = remember {
         ImageLoader.Builder(context)
+            .memoryCache {
+                MemoryCache.Builder(context)
+                    .maxSizePercent(0.10)
+                    .build()
+            }
             .components {
                 add(VideoFrameDecoder.Factory())
             }
             .build()
     }
 
-    // 載入影片列表
+    // 載入影片列表 (非同步於 Dispatchers.IO，避免主線程 I/O 阻塞)
     LaunchedEffect(Unit) {
         if (PermissionUtils.hasMediaPermissions(context)) {
-            videoList = loadVideos(context)
+            videoList = withContext(Dispatchers.IO) { loadVideos(context) }
         }
         isLoading = false
     }
@@ -239,9 +248,15 @@ fun VideoPlayerDialog(uri: Uri, onDismiss: () -> Unit) {
         }
     }
 
-    DisposableEffect(Unit) {
+    DisposableEffect(exoPlayer) {
         onDispose {
-            exoPlayer.release()
+            try {
+                exoPlayer.stop()
+                exoPlayer.clearMediaItems()
+                exoPlayer.release()
+            } catch (e: Exception) {
+                Log.e("VideoPlayerDialog", "Error releasing player", e)
+            }
         }
     }
 
@@ -446,16 +461,22 @@ suspend fun loadVideos(context: Context): List<VideoItem> = withContext(Dispatch
 }
 
 fun deleteVideo(context: Context, video: VideoItem, onSuccess: () -> Unit) {
-    try {
-        val rowsDeleted = context.contentResolver.delete(video.uri, null, null)
-        if (rowsDeleted > 0) {
-            Toast.makeText(context, "Deleted successfully", Toast.LENGTH_SHORT).show()
-            onSuccess()
-        } else {
-            Toast.makeText(context, "File not found or already deleted", Toast.LENGTH_SHORT).show()
-            onSuccess() 
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val rowsDeleted = context.contentResolver.delete(video.uri, null, null)
+            withContext(Dispatchers.Main) {
+                if (rowsDeleted > 0) {
+                    Toast.makeText(context, "Deleted successfully", Toast.LENGTH_SHORT).show()
+                    onSuccess()
+                } else {
+                    Toast.makeText(context, "File not found or already deleted", Toast.LENGTH_SHORT).show()
+                    onSuccess()
+                }
+            }
+        } catch (e: Exception) {
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "Failed to delete: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
         }
-    } catch (e: Exception) {
-        Toast.makeText(context, "Failed to delete: ${e.message}", Toast.LENGTH_SHORT).show()
     }
 }

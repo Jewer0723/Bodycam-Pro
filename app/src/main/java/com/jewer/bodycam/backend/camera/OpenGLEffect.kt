@@ -318,6 +318,7 @@ class WideAngleSurfaceProcessor(
 
                         updateBrandOverlayTexture(size.width, size.height)
                         render(finalMatrix)
+                        GLES20.glFlush()
                         EGL14.eglSwapBuffers(eglDisplay, windowSurface)
                     }
                 }
@@ -335,11 +336,17 @@ class WideAngleSurfaceProcessor(
                 } catch (e: Exception) {
                     Log.e("WideAngle", "surfaceOutput.close error", e)
                 }
-                glExecutor.execute {
+                handler.post {
                     val removed = outputSurfaces.remove(surfaceOutput)
                     if (removed != null && removed != EGL14.EGL_NO_SURFACE && eglDisplay != EGL14.EGL_NO_DISPLAY) {
-                        EGL14.eglMakeCurrent(eglDisplay, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
-                        EGL14.eglDestroySurface(eglDisplay, removed)
+                        try {
+                            if (pbufferSurface != EGL14.EGL_NO_SURFACE) {
+                                EGL14.eglMakeCurrent(eglDisplay, pbufferSurface, pbufferSurface, eglContext)
+                            }
+                            EGL14.eglDestroySurface(eglDisplay, removed)
+                        } catch (e: Exception) {
+                            Log.e("WideAngle", "EGLDestroySurface error", e)
+                        }
                     }
                 }
             }

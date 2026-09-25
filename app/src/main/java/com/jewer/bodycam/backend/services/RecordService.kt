@@ -171,6 +171,9 @@ class RecordService: Service(), LifecycleOwner {
     }
 
     private fun startRecordingFile(): Boolean {
+        // 觸發一次垃圾回收，釋放已被丟棄的 Bitmap 與快取，為 Media3 MP4 封裝器 (BoxUtils / Mp4Writer) 預留連續 Java Heap 空間
+        System.gc()
+
         val qualitySetting = getVideoQuality(applicationContext)
         val videoCapture = CameraManager.getOrCreateVideoCapture(qualitySetting)
         try {

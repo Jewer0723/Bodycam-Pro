@@ -148,6 +148,19 @@ class WideAngleSurfaceProcessor(
 
     private var overlayBitmap: Bitmap? = null
 
+    // 預先快取 Shader 的 Uniform 與 Attribute 位置，避免在每影格 render 中重複呼叫 glGet*Location 引發 Mali GPU 驅動編譯器卡死 (cmpbe_v2_compile_multiple_shaders)
+    private var uTexMatrixHandle = -1
+    private var uKHandle = -1
+    private var uScaleHandle = -1
+    private var uFisheyeEnabledHandle = -1
+    private var sTextureHandle = -1
+    private var aPositionHandle = -1
+    private var aTexCoordHandle = -1
+
+    private var wAPositionHandle = -1
+    private var wATexCoordHandle = -1
+    private var wSTextureHandle = -1
+
     // 儲存每個輸出表面的資訊 (同時支援 PreviewView 與 VideoCapture Recorder 兩個輸出)
     private val outputSurfaces = mutableMapOf<SurfaceOutput, EGLSurface>()
 
@@ -286,6 +299,7 @@ class WideAngleSurfaceProcessor(
             newSurfaceTexture.setOnFrameAvailableListener {
                 if (!glThread.isAlive || surfaceTexture != newSurfaceTexture) return@setOnFrameAvailableListener
                 handler.post {
+                    if (outputSurfaces.isEmpty()) return@post
                     if (eglDisplay == EGL14.EGL_NO_DISPLAY || eglContext == EGL14.EGL_NO_CONTEXT || surfaceTexture != newSurfaceTexture) return@post
                     if (newSurfaceTexture.isReleased) return@post
 
@@ -1563,6 +1577,13 @@ class WideAngleSurfaceProcessor(
                 GLES20.glAttachShader(this, fs)
                 GLES20.glLinkProgram(this)
             }
+            aPositionHandle = GLES20.glGetAttribLocation(cameraProgram, "aPosition")
+            aTexCoordHandle = GLES20.glGetAttribLocation(cameraProgram, "aTexCoord")
+            uTexMatrixHandle = GLES20.glGetUniformLocation(cameraProgram, "uTexMatrix")
+            uKHandle = GLES20.glGetUniformLocation(cameraProgram, "uK")
+            uScaleHandle = GLES20.glGetUniformLocation(cameraProgram, "uScale")
+            uFisheyeEnabledHandle = GLES20.glGetUniformLocation(cameraProgram, "uFisheyeEnabled")
+            sTextureHandle = GLES20.glGetUniformLocation(cameraProgram, "sTexture")
         }
         if (watermarkProgram == 0) {
             val vs = loadShader(GLES20.GL_VERTEX_SHADER, watermarkVertexShaderCode)
@@ -1572,6 +1593,9 @@ class WideAngleSurfaceProcessor(
                 GLES20.glAttachShader(this, fs)
                 GLES20.glLinkProgram(this)
             }
+            wAPositionHandle = GLES20.glGetAttribLocation(watermarkProgram, "aPosition")
+            wATexCoordHandle = GLES20.glGetAttribLocation(watermarkProgram, "aTexCoord")
+            wSTextureHandle = GLES20.glGetUniformLocation(watermarkProgram, "sTexture")
         }
     }
 
@@ -1588,29 +1612,22 @@ class WideAngleSurfaceProcessor(
 
         // 1. 繪製相機畫面（若開啟魚眼則疊加魚眼效果，未開啟則為一般相機）
         GLES20.glUseProgram(cameraProgram)
-        val matrixHandle = GLES20.glGetUniformLocation(cameraProgram, "uTexMatrix")
-        GLES20.glUniformMatrix4fv(matrixHandle, 1, false, texMatrix, 0)
-
-        val kHandle = GLES20.glGetUniformLocation(cameraProgram, "uK")
-        GLES20.glUniform1f(kHandle, fisheyeK)
-        val scaleHandle = GLES20.glGetUniformLocation(cameraProgram, "uScale")
-        GLES20.glUniform1f(scaleHandle, fisheyeScale)
-        val fisheyeEnabledHandle = GLES20.glGetUniformLocation(cameraProgram, "uFisheyeEnabled")
-        GLES20.glUniform1i(fisheyeEnabledHandle, if (isFisheyeEnabled) 1 else 0)
+        GLES20.glUniformMatrix4fv(uTexMatrixHandle, 1, false, texMatrix, 0)
+        GLES20.glUniform1f(uKHandle, fisheyeK)
+        GLES20.glUniform1f(uScaleHandle, fisheyeScale)
+        GLES20.glUniform1i(uFisheyeEnabledHandle, if (isFisheyeEnabled) 1 else 0)
 
         cameraVertexData.position(0)
-        val posHandle = GLES20.glGetAttribLocation(cameraProgram, "aPosition")
-        GLES20.glEnableVertexAttribArray(posHandle)
-        GLES20.glVertexAttribPointer(posHandle, 2, GLES20.GL_FLOAT, false, 16, cameraVertexData)
+        GLES20.glEnableVertexAttribArray(aPositionHandle)
+        GLES20.glVertexAttribPointer(aPositionHandle, 2, GLES20.GL_FLOAT, false, 16, cameraVertexData)
 
         cameraVertexData.position(2)
-        val texHandle = GLES20.glGetAttribLocation(cameraProgram, "aTexCoord")
-        GLES20.glEnableVertexAttribArray(texHandle)
-        GLES20.glVertexAttribPointer(texHandle, 2, GLES20.GL_FLOAT, false, 16, cameraVertexData)
+        GLES20.glEnableVertexAttribArray(aTexCoordHandle)
+        GLES20.glVertexAttribPointer(aTexCoordHandle, 2, GLES20.GL_FLOAT, false, 16, cameraVertexData)
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, cameraTexName)
-        GLES20.glUniform1i(GLES20.glGetUniformLocation(cameraProgram, "sTexture"), 0)
+        GLES20.glUniform1i(sTextureHandle, 0)
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
 
         // 2. 繪製品牌浮水印圖層 (開啟 Alpha 混合)
@@ -1619,19 +1636,17 @@ class WideAngleSurfaceProcessor(
             GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
 
             GLES20.glUseProgram(watermarkProgram)
-            val wPosHandle = GLES20.glGetAttribLocation(watermarkProgram, "aPosition")
-            GLES20.glEnableVertexAttribArray(wPosHandle)
+            GLES20.glEnableVertexAttribArray(wAPositionHandle)
             watermarkVertexData.position(0)
-            GLES20.glVertexAttribPointer(wPosHandle, 2, GLES20.GL_FLOAT, false, 16, watermarkVertexData)
+            GLES20.glVertexAttribPointer(wAPositionHandle, 2, GLES20.GL_FLOAT, false, 16, watermarkVertexData)
 
-            val wTexHandle = GLES20.glGetAttribLocation(watermarkProgram, "aTexCoord")
-            GLES20.glEnableVertexAttribArray(wTexHandle)
+            GLES20.glEnableVertexAttribArray(wATexCoordHandle)
             watermarkVertexData.position(2)
-            GLES20.glVertexAttribPointer(wTexHandle, 2, GLES20.GL_FLOAT, false, 16, watermarkVertexData)
+            GLES20.glVertexAttribPointer(wATexCoordHandle, 2, GLES20.GL_FLOAT, false, 16, watermarkVertexData)
 
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, watermarkTexName)
-            GLES20.glUniform1i(GLES20.glGetUniformLocation(watermarkProgram, "sTexture"), 0)
+            GLES20.glUniform1i(wSTextureHandle, 0)
 
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
 

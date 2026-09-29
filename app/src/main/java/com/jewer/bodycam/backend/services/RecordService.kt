@@ -192,6 +192,7 @@ class RecordService: Service(), LifecycleOwner {
             val mediaStoreOutputOptions = MediaStoreOutputOptions
                 .Builder(contentResolver, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
                 .setContentValues(contentValues)
+                .setFileSizeLimit(1024 * 1024 * 1024L) // 1 GB 檔鎖分段上限，防範長錄影 MP4 索引封裝時 Java Heap OOM 閃退
                 .build()
 
             val isMuteMode = getSilentVideoStatus(applicationContext)
@@ -240,10 +241,12 @@ class RecordService: Service(), LifecycleOwner {
                             val updateValues = ContentValues().apply {
                                 put(MediaStore.Video.Media.IS_PENDING, 0)
                             }
-                            try {
-                                contentResolver.update(outputUri, updateValues, null, null)
-                            } catch (e: Exception) {
-                                Log.e("RecordService", "Error clearing IS_PENDING", e)
+                            serviceScope.launch(Dispatchers.IO) {
+                                try {
+                                    contentResolver.update(outputUri, updateValues, null, null)
+                                } catch (e: Exception) {
+                                    Log.e("RecordService", "Error clearing IS_PENDING", e)
+                                }
                             }
                         }
 

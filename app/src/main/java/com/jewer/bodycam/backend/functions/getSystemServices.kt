@@ -18,6 +18,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 
 // 獲取裝置名稱
 fun getPhoneName(): String {
@@ -79,6 +80,7 @@ object SoundPoolManager {
     private var soundPool: SoundPool? = null
     private val soundMap = ConcurrentHashMap<Int, Int>()
     private val loadedSet = ConcurrentHashMap.newKeySet<Int>()
+    private val soundExecutor = Executors.newSingleThreadExecutor()
 
     private fun getOrCreateSoundPool(): SoundPool {
         return soundPool ?: synchronized(this) {
@@ -103,38 +105,41 @@ object SoundPoolManager {
     }
 
     fun play(context: Context, resourceId: Int) {
-        try {
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            val userVolumePercent = getBeepVolume(context)
-            val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-            val targetVol = (maxVol * (userVolumePercent / 100f)).toInt().coerceIn(1, maxVol)
-
-            // 直接同步媒體系統音量至使用者設定之目標音量
+        val appContext = context.applicationContext
+        soundExecutor.execute {
             try {
-                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)
+                val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                val userVolumePercent = getBeepVolume(appContext)
+                val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                val targetVol = (maxVol * (userVolumePercent / 100f)).toInt().coerceIn(1, maxVol)
+
+                // 在專屬背景執行緒同步媒體系統音量，絕不阻塞主線程 Binder IPC (避免 AudioService checkDispatchVolumeKeyEvent ANR)
+                try {
+                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)
+                } catch (e: Exception) {
+                    Log.e("SoundPoolManager", "Error adjusting stream volume", e)
+                }
+
+                val sp = getOrCreateSoundPool()
+                val sampleId = soundMap.computeIfAbsent(resourceId) { resId ->
+                    sp.load(appContext, resId, 1)
+                }
+
+                val volumeFraction = (userVolumePercent / 100f).coerceIn(0.05f, 1.0f)
+
+                var streamId = 0
+                if (loadedSet.contains(sampleId)) {
+                    streamId = sp.play(sampleId, volumeFraction, volumeFraction, 1, 0, 1.0f)
+                }
+
+                // 若 SoundPool 尚未加載完或播送失敗，立即調用 MediaPlayer 備援保障播送
+                if (streamId == 0) {
+                    playMediaPlayerFallback(appContext, resourceId, volumeFraction)
+                }
             } catch (e: Exception) {
-                Log.e("SoundPoolManager", "Error adjusting stream volume", e)
+                Log.e("SoundPoolManager", "Error playing sound", e)
+                playMediaPlayerFallback(appContext, resourceId, 1.0f)
             }
-
-            val sp = getOrCreateSoundPool()
-            val sampleId = soundMap.computeIfAbsent(resourceId) { resId ->
-                sp.load(context.applicationContext, resId, 1)
-            }
-
-            val volumeFraction = (userVolumePercent / 100f).coerceIn(0.05f, 1.0f)
-
-            var streamId = 0
-            if (loadedSet.contains(sampleId)) {
-                streamId = sp.play(sampleId, volumeFraction, volumeFraction, 1, 0, 1.0f)
-            }
-
-            // 若 SoundPool 尚未加載完或播送失敗，立即調用 MediaPlayer 備援保障播送
-            if (streamId == 0) {
-                playMediaPlayerFallback(context, resourceId, volumeFraction)
-            }
-        } catch (e: Exception) {
-            Log.e("SoundPoolManager", "Error playing sound", e)
-            playMediaPlayerFallback(context, resourceId, 1.0f)
         }
     }
 

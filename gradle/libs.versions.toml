@@ -18,7 +18,7 @@ lifecycleProcessVersion = "2.11.0"
 uiTestManifest = "1.12.1"
 media3Exoplayer = "1.11.1"
 media3Ui = "1.11.1"
-play-services-nearby = "19.5.0"
+play-services-nearby = "19.5.1"
 google-play-app-update = "2.1.0"
 coil = "2.7.0"
 

@@ -31,7 +31,9 @@ object CameraManager {
     @SuppressLint("StaticFieldLeak")
     var surfaceProcessor: WideAngleSurfaceProcessor? = null
         private set
-    var wideAngleEffect: CustomCameraEffect? = null
+    var previewEffect: CustomCameraEffect? = null
+        private set
+    var videoEffect: CustomCameraEffect? = null
         private set
     var preview: Preview? = null
         private set
@@ -72,11 +74,16 @@ object CameraManager {
                 isRecording = isRecording
             )
             surfaceProcessor = processor
-            wideAngleEffect = CustomCameraEffect(
-                CameraEffect.PREVIEW or CameraEffect.VIDEO_CAPTURE,
+            previewEffect = CustomCameraEffect(
+                CameraEffect.PREVIEW,
                 cameraExecutor,
                 processor
-            ) { Log.e("CameraManager", "WideAngleEffect error", it) }
+            ) { Log.e("CameraManager", "PreviewEffect error", it) }
+            videoEffect = CustomCameraEffect(
+                CameraEffect.VIDEO_CAPTURE,
+                cameraExecutor,
+                processor
+            ) { Log.e("CameraManager", "VideoEffect error", it) }
         } else {
             processor.updateParams(
                 isPortrait = isPortrait,
@@ -141,7 +148,8 @@ object CameraManager {
         }
 
         val vCap = getOrCreateVideoCapture(selectedQuality)
-        val effect = wideAngleEffect ?: return null
+        val pEffect = previewEffect ?: return null
+        val vEffect = videoEffect ?: return null
 
         val previewBuilder = Preview.Builder()
         if (fps > 0) {
@@ -168,7 +176,8 @@ object CameraManager {
             val useCaseGroup = UseCaseGroup.Builder()
                 .addUseCase(newPreview)
                 .addUseCase(vCap)
-                .addEffect(effect)
+                .addEffect(pEffect)
+                .addEffect(vEffect)
                 .build()
 
             val camera = cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, useCaseGroup)

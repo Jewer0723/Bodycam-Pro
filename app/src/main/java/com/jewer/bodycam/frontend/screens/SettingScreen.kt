@@ -363,6 +363,7 @@ fun SettingScreen(
                                         updateRecordSoundType(context, "New")
                                         recordSoundExpand = false
                                         playSound(context, getStartRecordSoundRes(context))
+                                        if (isVibrateChecked.value) vibrateOnce(context, 500)
                                     }
                                 )
                                 DropdownMenuItem(
@@ -372,6 +373,7 @@ fun SettingScreen(
                                         updateRecordSoundType(context, "Old")
                                         recordSoundExpand = false
                                         playSound(context, getStartRecordSoundRes(context))
+                                        if (isVibrateChecked.value) vibrateOnce(context, 500)
                                     }
                                 )
                             }
@@ -387,7 +389,7 @@ fun SettingScreen(
                         muteFirstSeconds = 999
                         updateMuteFirstSeconds(context, 999)
                     }
-                    playFeedback()
+                    if (isSilentVideoChecked) playFeedback()
                 }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(text = "Initial / Full Mute Mode", textAlign = TextAlign.Start, modifier = Modifier.weight(1f), color = White)
@@ -398,7 +400,7 @@ fun SettingScreen(
                                 muteFirstSeconds = 999
                                 updateMuteFirstSeconds(context, 999)
                             }
-                            playFeedback()
+                            if (isSilentVideoChecked) playFeedback()
                         },
                             colors = SwitchDefaults.colors(checkedThumbColor = White, uncheckedThumbColor = White, checkedTrackColor = DarkYellow, uncheckedTrackColor = Gray))
                     }

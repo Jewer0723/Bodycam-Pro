@@ -67,6 +67,7 @@ import com.jewer.bodycam.backend.functions.getLowBrightnessStatus
 import com.jewer.bodycam.backend.functions.getMuteFirstSeconds
 import com.jewer.bodycam.backend.functions.getOrientationMode
 import com.jewer.bodycam.backend.functions.getRecordSoundType
+import com.jewer.bodycam.backend.functions.getSegmentDurationMinutes
 import com.jewer.bodycam.backend.functions.getSelectedBackCameraId
 import com.jewer.bodycam.backend.functions.getSelectedFrontCameraId
 import com.jewer.bodycam.backend.functions.getSilentVideoStatus
@@ -91,6 +92,7 @@ import com.jewer.bodycam.backend.functions.updateLowBrightnessStatus
 import com.jewer.bodycam.backend.functions.updateMuteFirstSeconds
 import com.jewer.bodycam.backend.functions.updateOrientationMode
 import com.jewer.bodycam.backend.functions.updateRecordSoundType
+import com.jewer.bodycam.backend.functions.updateSegmentDurationMinutes
 import com.jewer.bodycam.backend.functions.updateSelectedBackCameraId
 import com.jewer.bodycam.backend.functions.updateSelectedFrontCameraId
 import com.jewer.bodycam.backend.functions.updateSilentVideoStatus
@@ -122,6 +124,7 @@ fun SettingScreen(
     var timeIntervalExpand by remember { mutableStateOf(false) }
     var fpsExpand by remember { mutableStateOf(false) }
     var qualityExpand by remember { mutableStateOf(false) }
+    var segmentExpand by remember { mutableStateOf(false) }
     var brandExpand by remember { mutableStateOf(false) }
     var orientationExpand by remember { mutableStateOf(false) }
     var backCameraExpand by remember { mutableStateOf(false) }
@@ -245,6 +248,25 @@ fun SettingScreen(
             ?: qualityOptions.find { it.code == "SD" }!!
     }
     var chosenQualityOption by remember { mutableStateOf(initialQualityOption) }
+
+    data class SegmentOption(val displayText: String, val minutes: Float)
+    val segmentOptions = listOf(
+        SegmentOption("Not segmented", 0f),
+        SegmentOption("0.5 min", 0.5f),
+        SegmentOption("1 min", 1f),
+        SegmentOption("1.5 min", 1.5f),
+        SegmentOption("2 min", 2f),
+        SegmentOption("3 min", 3f),
+        SegmentOption("5 min", 5f),
+        SegmentOption("10 min", 10f),
+        SegmentOption("30 min", 30f),
+        SegmentOption("60 min", 60f),
+    )
+    val initialSegmentOption = remember {
+        segmentOptions.find { it.minutes == getSegmentDurationMinutes(context) }
+            ?: segmentOptions.find { it.minutes == 0f }!!
+    }
+    var chosenSegmentOption by remember { mutableStateOf(initialSegmentOption) }
 
     val bodycamBrands = listOf("AXON", "MOTOROLA", "TRANSCEND", "GETAC", "DOZOR", "PANASONIC")
 
@@ -626,6 +648,24 @@ fun SettingScreen(
                     }
                 }
 
+                // 分段錄影設定
+                TextButton(onClick = { segmentExpand = !segmentExpand }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "Segmented Recording", textAlign = TextAlign.Start, modifier = Modifier.weight(1f), color = White)
+                        Text(text = chosenSegmentOption.displayText, color = DarkYellow)
+                        DropdownMenu(expanded = segmentExpand, onDismissRequest = { segmentExpand = false }, modifier = Modifier.border(1.dp, White)) {
+                            segmentOptions.forEach { option ->
+                                DropdownMenuItem(text = { Text(text = option.displayText, color = White) }, onClick = {
+                                    chosenSegmentOption = option
+                                    updateSegmentDurationMinutes(context, option.minutes)
+                                    playFeedback()
+                                    segmentExpand = false
+                                })
+                            }
+                        }
+                    }
+                }
+
                 // 相機影格率 (FPS) 選擇
                 TextButton(onClick = { fpsExpand = !fpsExpand }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -661,8 +701,6 @@ fun SettingScreen(
                         }
                     }
                 }
-
-
 
                 // 前置相機選擇 (下拉選單方式)
                 TextButton(onClick = { frontCameraExpand = !frontCameraExpand }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {

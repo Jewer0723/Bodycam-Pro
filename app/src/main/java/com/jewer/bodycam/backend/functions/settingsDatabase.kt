@@ -441,3 +441,24 @@ fun getVideoQuality(context: Context): String {
 }
 
 /******************************************************************************************************************/
+
+// 更新分段錄影時間 (單位: 分鐘, 0f 表示不分段; 選項: 0.5, 1, 1.5, 2, 3, 5, 10, 30, 60, 0)
+fun updateSegmentDurationMinutes(context: Context, minutes: Float) {
+    val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    sharedPreferences.edit {
+        putFloat("segmentDurationMinutes", minutes)
+    }
+}
+
+// 讀取分段錄影時間 (預設 0f 即不分段)
+fun getSegmentDurationMinutes(context: Context): Float {
+    val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    return try {
+        sharedPreferences.getFloat("segmentDurationMinutes", 0f)
+    } catch (_: Exception) {
+        sharedPreferences.getInt("segmentDurationMinutes", 0).toFloat()
+    }
+}
+
+/******************************************************************************************************************/
+

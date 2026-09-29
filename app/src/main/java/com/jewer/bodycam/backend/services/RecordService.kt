@@ -35,6 +35,7 @@ import com.jewer.bodycam.backend.functions.getFisheyeK
 import com.jewer.bodycam.backend.functions.getFisheyeScale
 import com.jewer.bodycam.backend.functions.getMuteFirstSeconds
 import com.jewer.bodycam.backend.functions.getOrientationMode
+import com.jewer.bodycam.backend.functions.getSegmentDurationMinutes
 import com.jewer.bodycam.backend.functions.getSilentVideoStatus
 import com.jewer.bodycam.backend.functions.getSimulatedWideAngleStatus
 import com.jewer.bodycam.backend.functions.getStartRecordSoundRes
@@ -47,6 +48,7 @@ import com.jewer.bodycam.backend.functions.playSound
 import com.jewer.bodycam.backend.functions.vibrateOnce
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
@@ -66,6 +68,7 @@ class RecordService: Service(), LifecycleOwner {
         field = LifecycleRegistry(this)
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var segmentJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -192,7 +195,6 @@ class RecordService: Service(), LifecycleOwner {
             val mediaStoreOutputOptions = MediaStoreOutputOptions
                 .Builder(contentResolver, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
                 .setContentValues(contentValues)
-                .setFileSizeLimit(1024 * 1024 * 1024L) // 1 GB 檔鎖分段上限，防範長錄影 MP4 索引封裝時 Java Heap OOM 閃退
                 .build()
 
             val isMuteMode = getSilentVideoStatus(applicationContext)
@@ -215,6 +217,23 @@ class RecordService: Service(), LifecycleOwner {
                 when (recordEvent) {
                     is VideoRecordEvent.Start -> {
                         _isServiceRunning.value = true
+
+                        // 分段錄影計時器 (單位: 分鐘)
+                        segmentJob?.cancel()
+                        val segmentMinutes = getSegmentDurationMinutes(applicationContext)
+                        if (segmentMinutes > 0f) {
+                            segmentJob = serviceScope.launch {
+                                delay((segmentMinutes * 60 * 1000L).toLong().milliseconds)
+                                if (_isServiceRunning.value && activeRecording != null) {
+                                    Log.d("RecordService", "Segment limit of $segmentMinutes min reached. Splitting recording file...")
+                                    try {
+                                        activeRecording?.stop()
+                                    } catch (e: Exception) {
+                                        Log.e("RecordService", "Error stopping recording for segment split", e)
+                                    }
+                                }
+                            }
+                        }
 
                         // 開啟靜音模式且指定前幾秒靜音 (例如 5, 10, 20, 30 秒)
                         if (isMuteMode && muteSeconds in 1..998) {
@@ -263,7 +282,18 @@ class RecordService: Service(), LifecycleOwner {
                                 }
                             }
                         } else {
-                            _isServiceRunning.value = false
+                            // 若前台服務意圖仍為開啟 (分段錄影時間到達自動 stop)，自動開始下一個分段檔案
+                            if (_isServiceRunning.value) {
+                                serviceScope.launch {
+                                    delay(200.milliseconds)
+                                    if (_isServiceRunning.value) {
+                                        Log.d("RecordService", "Starting next video segment...")
+                                        startRecordingFile()
+                                    }
+                                }
+                            } else {
+                                _isServiceRunning.value = false
+                            }
                         }
                     }
                 }
@@ -278,6 +308,8 @@ class RecordService: Service(), LifecycleOwner {
     private fun stopRecordingLogic() {
         if (!_isServiceRunning.value && activeRecording == null) return
         _isServiceRunning.value = false
+        segmentJob?.cancel()
+        segmentJob = null
         try {
             activeRecording?.stop()
             activeRecording = null
@@ -329,6 +361,8 @@ class RecordService: Service(), LifecycleOwner {
 
     override fun onDestroy() {
         super.onDestroy()
+        segmentJob?.cancel()
+        segmentJob = null
         activeRecording?.stop()
         activeRecording = null
         _isServiceRunning.value = false

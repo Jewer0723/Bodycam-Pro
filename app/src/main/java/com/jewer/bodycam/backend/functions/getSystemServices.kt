@@ -1,6 +1,7 @@
 package com.jewer.bodycam.backend.functions
 
 import android.app.Activity
+import android.content.ContentUris
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioManager
@@ -8,13 +9,18 @@ import android.media.MediaPlayer
 import android.media.SoundPool
 import android.os.BatteryManager
 import android.os.Build
+import android.os.Environment
+import android.os.StatFs
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.provider.MediaStore
 import android.util.Log
 import android.view.WindowManager
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.jewer.bodycam.R
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -169,4 +175,94 @@ object SoundPoolManager {
 // 撥放音檔及音量控制 (使用 SoundPool 免系統全域音量衝突與解碼卡頓)
 fun playSound(context: Context, resourceId: Int) {
     SoundPoolManager.play(context, resourceId)
+}
+
+// 檢查儲存空間，若小於安全臨界值 (預設 1GB)，自動由舊至新刪除最舊的錄影檔案 (全自動執行)
+fun checkAndCleanStorage(context: Context, minFreeBytes: Long = 1024L * 1024L * 1024L) {
+    try {
+        val path = Environment.getExternalStorageDirectory()
+        val stat = StatFs(path.path)
+        var availableBytes = stat.availableBytes
+
+        if (availableBytes >= minFreeBytes) return
+
+        Log.w("StorageCleanup", "Storage space low ($availableBytes bytes free < $minFreeBytes required). Auto deleting oldest videos...")
+        val appName = context.getString(R.string.app_name)
+
+        // 1. 透過 MediaStore 查詢 Movies/Bodycam 中已完成之錄影檔案 (依 DATE_ADDED 遞增排序，舊檔在前)
+        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        } else {
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        }
+
+        val projection = arrayOf(
+            MediaStore.Video.Media._ID,
+            MediaStore.Video.Media.DISPLAY_NAME,
+            MediaStore.Video.Media.SIZE
+        )
+
+        val selection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            "${MediaStore.Video.Media.RELATIVE_PATH} LIKE ? AND ${MediaStore.Video.Media.IS_PENDING} = 0"
+        } else {
+            "${MediaStore.Video.Media.DATA} LIKE ?"
+        }
+
+        val selectionArgs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            arrayOf("Movies/$appName/%")
+        } else {
+            arrayOf("%/Movies/$appName/%")
+        }
+
+        val sortOrder = "${MediaStore.Video.Media.DATE_ADDED} ASC"
+
+        context.contentResolver.query(
+            collection,
+            projection,
+            selection,
+            selectionArgs,
+            sortOrder
+        )?.use { cursor ->
+            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+            val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
+            val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
+
+            while (cursor.moveToNext() && availableBytes < minFreeBytes) {
+                val id = cursor.getLong(idColumn)
+                val size = cursor.getLong(sizeColumn)
+                val name = cursor.getString(nameColumn)
+                val contentUri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
+
+                try {
+                    val deletedRows = context.contentResolver.delete(contentUri, null, null)
+                    if (deletedRows > 0) {
+                        availableBytes += size
+                        Log.i("StorageCleanup", "Deleted oldest video: $name (size: $size bytes). Updated free space: $availableBytes bytes")
+                    }
+                } catch (e: Exception) {
+                    Log.e("StorageCleanup", "Failed to delete video via MediaStore: $name", e)
+                }
+            }
+        }
+
+        // 2. 實體目錄層級雙重檢查清理 (若 MediaStore 未能清理乾淨)
+        if (availableBytes < minFreeBytes) {
+            val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+            val bodycamDir = File(moviesDir, appName)
+            if (bodycamDir.exists() && bodycamDir.isDirectory) {
+                val files = bodycamDir.listFiles { file -> file.isFile && file.name.endsWith(".mp4") }
+                files?.sortBy { it.lastModified() }
+                files?.forEach { file ->
+                    if (availableBytes >= minFreeBytes) return@forEach
+                    val fileSize = file.length()
+                    if (file.delete()) {
+                        availableBytes += fileSize
+                        Log.i("StorageCleanup", "Deleted file directly from disk: ${file.name}")
+                    }
+                }
+            }
+        }
+    } catch (e: Exception) {
+        Log.e("StorageCleanup", "Error during storage cleanup", e)
+    }
 }

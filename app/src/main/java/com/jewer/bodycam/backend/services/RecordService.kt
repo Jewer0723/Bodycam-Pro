@@ -29,6 +29,7 @@ import androidx.lifecycle.LifecycleRegistry
 import com.jewer.bodycam.MainActivity
 import com.jewer.bodycam.R
 import com.jewer.bodycam.backend.camera.CameraManager
+import com.jewer.bodycam.backend.functions.checkAndCleanStorage
 import com.jewer.bodycam.backend.functions.getBeepSoundStatus
 import com.jewer.bodycam.backend.functions.getBodycamBrand
 import com.jewer.bodycam.backend.functions.getFisheyeK
@@ -174,6 +175,9 @@ class RecordService: Service(), LifecycleOwner {
     }
 
     private fun startRecordingFile(): Boolean {
+        // 容量不足時，自動由舊至新刪除舊檔案以釋出空間
+        checkAndCleanStorage(applicationContext)
+
         // 觸發一次垃圾回收，釋放已被丟棄的 Bitmap 與快取，為 Media3 MP4 封裝器 (BoxUtils / Mp4Writer) 預留連續 Java Heap 空間
         System.gc()
 
